@@ -9,8 +9,10 @@ import {
   Code2,
   Copy,
   Download,
+  ExternalLink,
   FileText,
   FolderGit2,
+  GitBranch,
   Home,
   Image as ImageIcon,
   Lock,
@@ -35,13 +37,19 @@ import {
 } from '../data/defaultSite';
 import { BOOTSTRAPPED_ADMIN_EMAIL } from '../lib/firebase';
 import {
+  clearAdminDraftLocal,
   deleteCloudMediaAsset,
   deleteContactMessageFromCloud,
+  getGitHubSyncStatus,
   grantAdminAccess,
   listCloudMediaAssets,
   listContactMessagesFromCloud,
+  loadAdminDraftLocal,
+  publishSiteToGitHub,
+  saveAdminDraftLocal,
   saveSiteConfigToCloud,
   uploadMediaToCloud,
+  type GitHubSyncStatus,
 } from '../services/portfolioStore';
 import type {
   CardRadius,
@@ -85,6 +93,7 @@ type AdminTab =
 interface AdminWorkspaceProps {
   site: SiteConfig;
   user: User;
+  cloudSyncWarning?: string | null;
   onSiteSaved: (updated: SiteConfig) => void;
   onLogout: (reason?: string) => void;
   onExit: () => void;
@@ -106,13 +115,37 @@ function looksLikeVideoUrl(url: string): boolean {
 export function AdminWorkspace({
   site,
   user,
+  cloudSyncWarning,
   onSiteSaved,
   onLogout,
   onExit,
 }: AdminWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('home');
-  const [draft, setDraft] = useState<SiteConfig>(() => structuredClone(site));
+  const initialRecoveredRef = useRef<ReturnType<typeof loadAdminDraftLocal>>(
+    loadAdminDraftLocal(user.uid),
+  );
+  const [draft, setDraft] = useState<SiteConfig>(() => {
+    const recovered = initialRecoveredRef.current;
+    if (recovered && JSON.stringify(recovered.draft) !== JSON.stringify(site)) {
+      return structuredClone(recovered.draft);
+    }
+    return structuredClone(site);
+  });
+  const [recoveredDraftAt, setRecoveredDraftAt] = useState<string | null>(() => {
+    const recovered = initialRecoveredRef.current;
+    if (recovered && JSON.stringify(recovered.draft) !== JSON.stringify(site)) {
+      return recovered.savedAt;
+    }
+    return null;
+  });
   const [saving, setSaving] = useState(false);
+  const [publishingGitHub, setPublishingGitHub] = useState(false);
+  const [githubStatus, setGithubStatus] = useState<GitHubSyncStatus>({
+    configured: false,
+    repo: '',
+    branch: 'main',
+  });
+  const [githubCommitUrl, setGithubCommitUrl] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -159,6 +192,17 @@ export function AdminWorkspace({
   }, [site]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (JSON.stringify(draft) !== JSON.stringify(site)) {
+        saveAdminDraftLocal(user.uid, draft);
+      } else {
+        clearAdminDraftLocal(user.uid);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [draft, site, user.uid]);
+
+  useEffect(() => {
     applySiteTheme(draft);
     return () => {
       applySiteTheme(site);
@@ -177,6 +221,12 @@ export function AdminWorkspace({
     listContactMessagesFromCloud()
       .then((list) => {
         if (active) setMessages(list);
+      })
+      .catch(() => {});
+
+    getGitHubSyncStatus(user)
+      .then((status) => {
+        if (active) setGithubStatus(status);
       })
       .catch(() => {});
 
@@ -200,10 +250,12 @@ export function AdminWorkspace({
 
     try {
       const saved = await saveSiteConfigToCloud(draft, user);
+      clearAdminDraftLocal(user.uid);
+      setRecoveredDraftAt(null);
       prevSiteJsonRef.current = JSON.stringify(saved);
       setDraft(structuredClone(saved));
       onSiteSaved(saved);
-      setSaveMessage('Semua perubahan tersimpan permanen di cloud database dan tampil di semua tautan.');
+      setSaveMessage('Semua perubahan tersimpan permanen di cloud & perangkat.');
       window.setTimeout(() => setSaveMessage(null), 4000);
     } catch (err) {
       setErrorMessage(
@@ -214,7 +266,48 @@ export function AdminWorkspace({
     }
   };
 
+  const handlePublishGitHub = async () => {
+    setPublishingGitHub(true);
+    setErrorMessage(null);
+    setSaveMessage(null);
+    setGithubCommitUrl(null);
+
+    try {
+      const result = await publishSiteToGitHub(draft, user);
+      const updated = result.site;
+      clearAdminDraftLocal(user.uid);
+      setRecoveredDraftAt(null);
+      prevSiteJsonRef.current = JSON.stringify(updated);
+      setDraft(structuredClone(updated));
+      onSiteSaved(updated);
+      await saveSiteConfigToCloud(updated, user).catch(() => {});
+      if (result.commitUrl) {
+        setGithubCommitUrl(result.commitUrl);
+      }
+      setSaveMessage('Data & media berhasil disimpan langsung ke repositori GitHub.');
+      window.setTimeout(() => setSaveMessage(null), 5000);
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal mengirim data ke repositori GitHub.',
+      );
+    } finally {
+      setPublishingGitHub(false);
+    }
+  };
+
+  const handleDownloadGitHubSnapshot = () => {
+    const blob = new Blob([JSON.stringify(draft, null, 2) + '\n'], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'site-snapshot.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleReset = () => {
+    clearAdminDraftLocal(user.uid);
+    setRecoveredDraftAt(null);
     setDraft(structuredClone(site));
     setSaveMessage(null);
     setErrorMessage(null);
@@ -362,14 +455,18 @@ export function AdminWorkspace({
     setErrorMessage(null);
     try {
       const saved = await saveSiteConfigToCloud(DEFAULT_SITE_CONFIG, user);
+      clearAdminDraftLocal(user.uid);
+      setRecoveredDraftAt(null);
       prevSiteJsonRef.current = JSON.stringify(saved);
       setDraft(structuredClone(saved));
       onSiteSaved(saved);
       setConfirmReset(false);
       setSaveMessage('Situs berhasil dikembalikan ke pengaturan awal di cloud.');
       window.setTimeout(() => setSaveMessage(null), 3500);
-    } catch {
-      setErrorMessage('Gagal mereset situs ke pengaturan awal.');
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal mereset situs ke pengaturan awal.',
+      );
     } finally {
       setSaving(false);
     }
@@ -590,12 +687,23 @@ export function AdminWorkspace({
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || publishingGitHub}
             className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-0 bg-[#18181b] px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#27272a] disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />
             {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
           </button>
+          {githubStatus.configured && (
+            <button
+              type="button"
+              onClick={handlePublishGitHub}
+              disabled={saving || publishingGitHub}
+              className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap border border-[#18181b] bg-white px-3 py-2 text-xs font-semibold text-[#18181b] transition-colors hover:bg-[#f4f4f5] disabled:opacity-50 sm:inline-flex"
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+              {publishingGitHub ? 'Push GitHub...' : 'Push ke GitHub'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -639,6 +747,35 @@ export function AdminWorkspace({
         </aside>
 
         <main className="min-w-0 flex-1 p-5 md:p-8">
+          {cloudSyncWarning && (
+            <div
+              role="status"
+              className="mb-4 border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900"
+            >
+              {cloudSyncWarning}
+            </div>
+          )}
+
+          {recoveredDraftAt && hasChanges && (
+            <div
+              role="status"
+              className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-900"
+            >
+              <span>
+                Draf editan terakhir Anda ({new Date(recoveredDraftAt).toLocaleString('id-ID')})
+                dipulihkan otomatis agar tidak hilang saat menutup browser atau mematikan perangkat.
+              </span>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="border-0 bg-sky-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-sky-800"
+              >
+                Terbitkan Sekarang
+              </button>
+            </div>
+          )}
+
           {errorMessage && (
             <div
               role="alert"
@@ -4376,6 +4513,83 @@ export function AdminWorkspace({
                     </button>
                   </form>
                 )}
+              </section>
+
+              <section className="border border-[#e4e4e7] bg-white p-6">
+                <h2 className="mb-2 mt-0 flex items-center gap-2 text-lg font-semibold text-[#18181b]">
+                  <GitBranch className="h-5 w-5" />
+                  Sinkronisasi Data ke GitHub (Permanen Tanpa Kuota)
+                </h2>
+                <p className="mb-4 mt-0 text-xs leading-relaxed text-[#71717a]">
+                  Simpan data teks, tema, proyek, sertifikat, galeri, serta foto/video langsung ke
+                  repositori GitHub (<code>src/data/site-snapshot.json</code> &amp;{' '}
+                  <code>public/media/</code>) agar data tidak pernah teriset meski perangkat
+                  dimatikan atau kuota cloud gratis penuh.
+                </p>
+
+                {githubStatus.configured ? (
+                  <div className="mb-4 space-y-3 border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-950">
+                    <div className="font-semibold">
+                      Terhubung ke GitHub: <code>{githubStatus.repo}</code> (branch{' '}
+                      <code>{githubStatus.branch}</code>)
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handlePublishGitHub}
+                        disabled={publishingGitHub}
+                        className="inline-flex items-center gap-2 border-0 bg-[#18181b] px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white hover:bg-[#27272a] disabled:opacity-50"
+                      >
+                        <GitBranch className="h-3.5 w-3.5" />
+                        {publishingGitHub
+                          ? 'Mengirim ke GitHub...'
+                          : 'Simpan & Push Data ke GitHub'}
+                      </button>
+                      {githubCommitUrl && (
+                        <a
+                          href={githubCommitUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-emerald-900 underline"
+                        >
+                          Lihat Commit GitHub
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4 space-y-2 border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-950">
+                    <p className="m-0 font-semibold">
+                      Mode Push Otomatis GitHub belum diaktifkan di server.
+                    </p>
+                    <p className="m-0">
+                      Untuk menyimpan langsung ke GitHub dengan 1 klik dari sini, tambahkan variabel
+                      lingkungan berikut di <strong>Vercel Environment Variables</strong> (atau{' '}
+                      <strong>Secrets</strong>):
+                    </p>
+                    <ul className="m-0 list-disc space-y-1 pl-4 font-mono text-[11px]">
+                      <li>GITHUB_TOKEN = Personal Access Token GitHub (Contents: Read &amp; Write)</li>
+                      <li>GITHUB_REPO = username/nama-repo</li>
+                      <li>GITHUB_BRANCH = main</li>
+                    </ul>
+                    <p className="m-0 pt-1">
+                      Atau unduh file <code>site-snapshot.json</code> di bawah lalu gantikan file{' '}
+                      <code>src/data/site-snapshot.json</code> di repositori GitHub Anda secara manual.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDownloadGitHubSnapshot}
+                    className="inline-flex items-center gap-2 border border-[#18181b] bg-white px-4 py-2.5 text-xs font-semibold text-[#18181b] hover:bg-[#f4f4f5]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Unduh site-snapshot.json (untuk GitHub)
+                  </button>
+                </div>
               </section>
 
               <section className="border border-[#e4e4e7] bg-white p-6">

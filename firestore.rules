@@ -221,16 +221,17 @@ service cloud.firestore {
         data.id == messageId &&
         data.id.size() <= 128 &&
         data.name is string &&
-        data.name.size() >= 1 &&
+        data.name.trim().size() >= 1 &&
         data.name.size() <= 80 &&
         data.email is string &&
-        data.email.size() >= 3 &&
+        data.email.size() >= 5 &&
         data.email.size() <= 120 &&
+        data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
         data.subject is string &&
-        data.subject.size() >= 1 &&
+        data.subject.trim().size() >= 1 &&
         data.subject.size() <= 120 &&
         data.message is string &&
-        data.message.size() >= 1 &&
+        data.message.trim().size() >= 3 &&
         data.message.size() <= 2500 &&
         data.createdAt is timestamp &&
         data.createdAt == request.time;

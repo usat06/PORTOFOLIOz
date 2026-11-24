@@ -16,14 +16,29 @@ import {
 } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { DEFAULT_SITE_CONFIG } from '../data/defaultSite';
+import siteSnapshotJson from '../data/site-snapshot.json';
 import {
   BOOTSTRAPPED_ADMIN_EMAIL,
   db,
+  FIRESTORE_QUOTA_UPGRADE_URL,
   handleFirestoreError,
+  isQuotaExceededError,
   OperationType,
 } from '../lib/firebase';
 import type { ContactMessage, MediaType, SiteConfig, UploadedAsset } from '../types/site';
 import { sanitizeSiteConfig, sanitizeText } from '../utils/siteSanitizer';
+
+export const COMMITTED_SITE_CONFIG: SiteConfig = sanitizeSiteConfig(
+  siteSnapshotJson as Partial<SiteConfig>,
+  DEFAULT_SITE_CONFIG,
+);
+
+const SITE_CACHE_KEY = 'uj_site_snapshot_v3';
+const ADMIN_DRAFT_PREFIX = 'uj_admin_draft_v3_';
+const CONTACT_COOLDOWN_KEY = 'uj_contact_cooldown_v1';
+const IDB_NAME = 'uj_portfolio_vault';
+const IDB_VERSION = 1;
+const IDB_MEDIA_STORE = 'media_blobs';
 
 const CHUNK_CHAR_LIMIT = 600_000;
 const MAX_MEDIA_BYTES = 18 * 1024 * 1024;
@@ -76,6 +91,190 @@ const MIME_TO_EXT: Record<string, string> = {
 
 const resolvedMediaCache = new Map<string, string>();
 const inflightMediaCache = new Map<string, Promise<string>>();
+
+interface CachedSiteRecord {
+  site: SiteConfig;
+  savedAt: string;
+}
+
+export interface AdminDraftRecord {
+  draft: SiteConfig;
+  savedAt: string;
+}
+
+export interface GitHubSyncStatus {
+  configured: boolean;
+  repo: string;
+  branch: string;
+}
+
+export interface GitHubPublishResult {
+  ok: boolean;
+  commitUrl?: string;
+  commitSha?: string;
+  committedFiles?: string[];
+  site: SiteConfig;
+}
+
+function openVaultDb(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    try {
+      const req = window.indexedDB.open(IDB_NAME, IDB_VERSION);
+      req.onupgradeneeded = () => {
+        const database = req.result;
+        if (!database.objectStoreNames.contains(IDB_MEDIA_STORE)) {
+          database.createObjectStore(IDB_MEDIA_STORE, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function readMediaBlobFromVault(
+  assetId: string,
+): Promise<{ blob: Blob; mimeType: string; filename?: string } | null> {
+  const database = await openVaultDb();
+  if (!database) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = database.transaction(IDB_MEDIA_STORE, 'readonly');
+      const req = tx.objectStore(IDB_MEDIA_STORE).get(assetId);
+      req.onsuccess = () => {
+        const record = req.result as
+          | { id: string; blob?: Blob; mimeType?: string; filename?: string }
+          | undefined;
+        if (record?.blob instanceof Blob) {
+          resolve({
+            blob: record.blob,
+            mimeType: record.mimeType || record.blob.type || 'application/octet-stream',
+            filename: record.filename,
+          });
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function writeMediaBlobToVault(
+  assetId: string,
+  blob: Blob,
+  mimeType: string,
+  filename?: string,
+): Promise<void> {
+  const database = await openVaultDb();
+  if (!database) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = database.transaction(IDB_MEDIA_STORE, 'readwrite');
+      tx.objectStore(IDB_MEDIA_STORE).put({
+        id: assetId,
+        blob,
+        mimeType,
+        filename: filename || assetId,
+        savedAt: new Date().toISOString(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function deleteMediaBlobFromVault(assetId: string): Promise<void> {
+  const database = await openVaultDb();
+  if (!database) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = database.transaction(IDB_MEDIA_STORE, 'readwrite');
+      tx.objectStore(IDB_MEDIA_STORE).delete(assetId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export function readCachedSiteSnapshot(): SiteConfig | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(SITE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedSiteRecord>;
+    if (!parsed?.site || typeof parsed.site !== 'object') return null;
+    return sanitizeSiteConfig(parsed.site, COMMITTED_SITE_CONFIG);
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedSiteSnapshot(site: SiteConfig): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const record: CachedSiteRecord = {
+      site,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(SITE_CACHE_KEY, JSON.stringify(record));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function getInitialSiteConfig(): SiteConfig {
+  return readCachedSiteSnapshot() ?? structuredClone(COMMITTED_SITE_CONFIG);
+}
+
+export function loadAdminDraftLocal(uid: string): AdminDraftRecord | null {
+  if (typeof window === 'undefined' || !uid) return null;
+  try {
+    const raw = window.localStorage.getItem(`${ADMIN_DRAFT_PREFIX}${uid}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AdminDraftRecord>;
+    if (!parsed?.draft || typeof parsed.draft !== 'object') return null;
+    return {
+      draft: sanitizeSiteConfig(parsed.draft, COMMITTED_SITE_CONFIG),
+      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveAdminDraftLocal(uid: string, draft: SiteConfig): void {
+  if (typeof window === 'undefined' || !uid) return;
+  try {
+    const record: AdminDraftRecord = {
+      draft,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(`${ADMIN_DRAFT_PREFIX}${uid}`, JSON.stringify(record));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function clearAdminDraftLocal(uid: string): void {
+  if (typeof window === 'undefined' || !uid) return;
+  try {
+    window.localStorage.removeItem(`${ADMIN_DRAFT_PREFIX}${uid}`);
+  } catch {
+    // Ignore
+  }
+}
 
 function timestampToIso(value: unknown): string {
   if (!value) return new Date().toISOString();
@@ -235,6 +434,13 @@ export async function resolveCloudMediaUrl(url: string): Promise<string> {
 
   const task = (async () => {
     try {
+      const vaultHit = await readMediaBlobFromVault(assetId);
+      if (vaultHit) {
+        const objectUrl = URL.createObjectURL(vaultHit.blob);
+        resolvedMediaCache.set(url, objectUrl);
+        return objectUrl;
+      }
+
       const metaSnap = await getDoc(doc(db, 'media_assets', assetId));
       if (!metaSnap.exists()) return url;
 
@@ -242,6 +448,7 @@ export async function resolveCloudMediaUrl(url: string): Promise<string> {
         chunkCount?: number;
         mimeType?: string;
         mediaType?: MediaType;
+        filename?: string;
       };
       const chunkCount = Number(meta.chunkCount ?? 0);
       if (!Number.isInteger(chunkCount) || chunkCount < 1 || chunkCount > MAX_CHUNKS) {
@@ -266,6 +473,7 @@ export async function resolveCloudMediaUrl(url: string): Promise<string> {
       const mimeType =
         meta.mimeType || (meta.mediaType === 'video' ? 'video/mp4' : 'image/jpeg');
       const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mimeType });
+      await writeMediaBlobToVault(assetId, blob, mimeType, meta.filename);
       const objectUrl = URL.createObjectURL(blob);
       resolvedMediaCache.set(url, objectUrl);
       return objectUrl;
@@ -317,15 +525,35 @@ export function subscribeToSiteConfig(
   onError?: (err: Error) => void,
 ): () => void {
   const ref = doc(db, 'site', 'main');
+  let receivedCloudDoc = false;
+
+  void fetch('/api/site')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((serverSite: Partial<SiteConfig> | null) => {
+      if (receivedCloudDoc || !serverSite || typeof serverSite !== 'object') return;
+      const sanitizedServer = sanitizeSiteConfig(serverSite, COMMITTED_SITE_CONFIG);
+      const localCached = readCachedSiteSnapshot();
+      if (!localCached) {
+        writeCachedSiteSnapshot(sanitizedServer);
+        onData(sanitizedServer);
+      }
+    })
+    .catch(() => {});
+
   return onSnapshot(
     ref,
     (snap) => {
       if (!snap.exists()) {
-        onData(structuredClone(DEFAULT_SITE_CONFIG));
+        // Never wipe locally cached or GitHub-committed site back to blank defaults when cloud doc is missing
+        const fallback = readCachedSiteSnapshot() ?? structuredClone(COMMITTED_SITE_CONFIG);
+        onData(fallback);
         return;
       }
+      receivedCloudDoc = true;
       const raw = snap.data() as Partial<SiteConfig> & { updatedAt?: unknown; updatedBy?: unknown };
-      onData(sanitizeSiteConfig(raw, DEFAULT_SITE_CONFIG));
+      const clean = sanitizeSiteConfig(raw, COMMITTED_SITE_CONFIG);
+      writeCachedSiteSnapshot(clean);
+      onData(clean);
     },
     (error) => {
       console.error('Firestore site subscription error:', error);
@@ -335,7 +563,24 @@ export function subscribeToSiteConfig(
 }
 
 export async function saveSiteConfigToCloud(site: SiteConfig, user: User): Promise<SiteConfig> {
-  const clean = sanitizeSiteConfig(site, DEFAULT_SITE_CONFIG);
+  const clean = sanitizeSiteConfig(site, COMMITTED_SITE_CONFIG);
+  writeCachedSiteSnapshot(clean);
+
+  // Sync to local server snapshot if running locally / non-Vercel Node server
+  try {
+    const idToken = await user.getIdToken();
+    await fetch('/api/site', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(clean),
+    }).catch(() => {});
+  } catch {
+    // Non-fatal if serverless filesystem is read-only
+  }
+
   const path = 'site/main';
   try {
     await setDoc(doc(db, 'site', 'main'), {
@@ -345,6 +590,11 @@ export async function saveSiteConfigToCloud(site: SiteConfig, user: User): Promi
     });
     return clean;
   } catch (error) {
+    if (isQuotaExceededError(error)) {
+      throw new Error(
+        `Kuota baca/tulis harian gratis Firestore tercapai, tetapi perubahan sudah diamankan di perangkat ini. Anda bisa menerbitkan ke GitHub atau meninjau kuota di: ${FIRESTORE_QUOTA_UPGRADE_URL}`,
+      );
+    }
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
@@ -381,6 +631,9 @@ export async function uploadMediaToCloud(
   const cleanOriginal = sanitizeText(file.name, 160) || filename;
   const assetPath = `media_assets/${assetId}`;
 
+  // Cache media blob in browser IndexedDB vault immediately
+  await writeMediaBlobToVault(assetId, blob, mimeType, cleanOriginal);
+
   try {
     await setDoc(doc(db, 'media_assets', assetId), {
       id: assetId,
@@ -393,6 +646,11 @@ export async function uploadMediaToCloud(
       createdAt: serverTimestamp(),
     });
   } catch (error) {
+    if (isQuotaExceededError(error)) {
+      throw new Error(
+        `Kuota harian gratis Firestore tercapai saat mengunggah file. Tunggu reset kuota harian atau tingkatkan kuota database di Firebase Console.`,
+      );
+    }
     handleFirestoreError(error, OperationType.CREATE, assetPath);
   }
 
@@ -414,6 +672,9 @@ export async function uploadMediaToCloud(
     }
   } catch (error) {
     await deleteDoc(doc(db, 'media_assets', assetId)).catch(() => {});
+    if (isQuotaExceededError(error)) {
+      throw new Error('Kuota harian Firestore tercapai saat menyimpan potongan file.');
+    }
     handleFirestoreError(error, OperationType.CREATE, `${assetPath}/chunks`);
   }
 
@@ -471,12 +732,16 @@ export async function listCloudMediaAssets(user: User): Promise<UploadedAsset[]>
     items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return items;
   } catch (error) {
+    if (isQuotaExceededError(error)) {
+      return [];
+    }
     handleFirestoreError(error, OperationType.LIST, path);
   }
 }
 
 export async function deleteCloudMediaAsset(assetId: string): Promise<void> {
   const path = `media_assets/${assetId}`;
+  await deleteMediaBlobFromVault(assetId).catch(() => {});
   try {
     const metaSnap = await getDoc(doc(db, 'media_assets', assetId));
     if (metaSnap.exists()) {
@@ -495,12 +760,192 @@ export async function deleteCloudMediaAsset(assetId: string): Promise<void> {
   }
 }
 
+function collectMediaUrlsFromSite(site: SiteConfig): string[] {
+  const urls = new Set<string>();
+  const add = (value: string | undefined) => {
+    if (value && value.startsWith('/api/media/')) {
+      urls.add(value.trim());
+    }
+  };
+  add(site.logo?.imageUrl);
+  add(site.hero?.imageUrl);
+  add(site.hero?.portraitUrl);
+  add(site.about?.showcaseImageUrl);
+  site.projects.forEach((p) => add(p.imageUrl));
+  site.certificates.forEach((c) => add(c.imageUrl));
+  site.works.forEach((w) => add(w.imageUrl));
+  site.pages.forEach((p) => add(p.coverUrl));
+  return Array.from(urls);
+}
+
+async function readMediaBase64ForPublish(
+  url: string,
+): Promise<{ filename: string; base64: string; url: string } | null> {
+  const assetId = extractMediaAssetId(url);
+  if (!assetId) return null;
+  const filename = url.slice('/api/media/'.length).split(/[?#]/)[0];
+
+  try {
+    const vaultHit = await readMediaBlobFromVault(assetId);
+    if (vaultHit && vaultHit.blob.size <= 3_500_000) {
+      const buffer = await vaultHit.blob.arrayBuffer();
+      return {
+        url,
+        filename,
+        base64: arrayBufferToBase64(buffer),
+      };
+    }
+
+    const resolved = await resolveCloudMediaUrl(url);
+    const res = await fetch(resolved);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size > 3_500_000) return null;
+    const buffer = await blob.arrayBuffer();
+    return {
+      url,
+      filename,
+      base64: arrayBufferToBase64(buffer),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getGitHubSyncStatus(user: User): Promise<GitHubSyncStatus> {
+  try {
+    const idToken = await user.getIdToken();
+    const res = await fetch('/api/github/status', {
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+    if (!res.ok) {
+      return { configured: false, repo: '', branch: 'main' };
+    }
+    return (await res.json()) as GitHubSyncStatus;
+  } catch {
+    return { configured: false, repo: '', branch: 'main' };
+  }
+}
+
+export async function publishSiteToGitHub(
+  site: SiteConfig,
+  user: User,
+  commitMessage?: string,
+): Promise<GitHubPublishResult> {
+  const cleanSite = sanitizeSiteConfig(site, COMMITTED_SITE_CONFIG);
+  const idToken = await user.getIdToken();
+
+  // First commit any small-to-medium referenced /api/media/* files directly into public/media/ on GitHub
+  const referencedMediaUrls = collectMediaUrlsFromSite(cleanSite);
+  const rewrittenMap = new Map<string, string>();
+
+  for (const mediaUrl of referencedMediaUrls) {
+    const payload = await readMediaBase64ForPublish(mediaUrl);
+    if (!payload) continue;
+    const mediaRes = await fetch('/api/github/publish-media', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        filename: payload.filename,
+        contentBase64: payload.base64,
+      }),
+    });
+    if (mediaRes.ok) {
+      const result = (await mediaRes.json()) as { publicUrl?: string };
+      if (result.publicUrl) {
+        rewrittenMap.set(mediaUrl, result.publicUrl);
+      }
+    }
+  }
+
+  const rewriteUrl = (val: string): string => rewrittenMap.get(val) || val;
+  const siteForGitHub: SiteConfig =
+    rewrittenMap.size === 0
+      ? cleanSite
+      : {
+          ...cleanSite,
+          logo: { ...cleanSite.logo, imageUrl: rewriteUrl(cleanSite.logo.imageUrl) },
+          hero: {
+            ...cleanSite.hero,
+            imageUrl: rewriteUrl(cleanSite.hero.imageUrl),
+            portraitUrl: rewriteUrl(cleanSite.hero.portraitUrl),
+          },
+          about: {
+            ...cleanSite.about,
+            showcaseImageUrl: rewriteUrl(cleanSite.about.showcaseImageUrl),
+          },
+          projects: cleanSite.projects.map((p) => ({ ...p, imageUrl: rewriteUrl(p.imageUrl) })),
+          certificates: cleanSite.certificates.map((c) => ({
+            ...c,
+            imageUrl: rewriteUrl(c.imageUrl),
+          })),
+          works: cleanSite.works.map((w) => ({ ...w, imageUrl: rewriteUrl(w.imageUrl) })),
+          pages: cleanSite.pages.map((p) => ({ ...p, coverUrl: rewriteUrl(p.coverUrl) })),
+        };
+
+  const res = await fetch('/api/github/publish', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      site: siteForGitHub,
+      commitMessage: commitMessage || `Update portofolio (${new Date().toISOString().slice(0, 16)})`,
+    }),
+  });
+
+  const data = (await res.json().catch(() => ({}))) as GitHubPublishResult & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error || 'Gagal menyimpan data ke repositori GitHub.');
+  }
+
+  writeCachedSiteSnapshot(siteForGitHub);
+  return {
+    ...data,
+    site: siteForGitHub,
+  };
+}
+
 export async function submitContactMessageToCloud(input: {
   name: string;
   email: string;
   subject: string;
   message: string;
+  honeypot?: string;
+  dwellMs?: number;
+  challengeA?: number;
+  challengeB?: number;
+  challengeAnswer?: string;
 }): Promise<string> {
+  if (input.honeypot && input.honeypot.trim().length > 0) {
+    throw new Error('Permintaan ditolak oleh sistem anti-bot.');
+  }
+
+  if (typeof input.dwellMs === 'number' && input.dwellMs < 2000) {
+    throw new Error('Mohon luangkan beberapa detik sebelum mengirim pesan.');
+  }
+
+  if (
+    typeof input.challengeA === 'number' &&
+    typeof input.challengeB === 'number' &&
+    Number(String(input.challengeAnswer ?? '').trim()) !== input.challengeA + input.challengeB
+  ) {
+    throw new Error('Jawaban verifikasi manusia tidak sesuai.');
+  }
+
+  if (typeof window !== 'undefined') {
+    const lastSent = Number(window.localStorage.getItem(CONTACT_COOLDOWN_KEY) || '0');
+    if (lastSent && Date.now() - lastSent < 45_000) {
+      throw new Error('Mohon tunggu 45 detik sebelum mengirim pesan berikutnya.');
+    }
+  }
+
   const name = sanitizeText(input.name, 80);
   const email = sanitizeText(input.email, 120);
   const subject = sanitizeText(input.subject, 120) || 'Pesan Portofolio';
@@ -511,6 +956,38 @@ export async function submitContactMessageToCloud(input: {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Format email tidak valid.');
+  }
+  if (message.length < 3) {
+    throw new Error('Pesan terlalu singkat.');
+  }
+  const urlMatches = message.match(/https?:\/\//gi) || [];
+  if (urlMatches.length > 2) {
+    throw new Error('Pesan mengandung terlalu banyak tautan.');
+  }
+
+  // Verify through server anti-bot endpoint first when available
+  const serverRes = await fetch('/api/contact', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'fetch',
+    },
+    body: JSON.stringify({
+      name,
+      email,
+      subject,
+      message,
+      honeypot: input.honeypot || '',
+      dwellMs: input.dwellMs ?? 3000,
+      challengeA: input.challengeA ?? 0,
+      challengeB: input.challengeB ?? 0,
+      challengeAnswer: input.challengeAnswer ?? '0',
+    }),
+  }).catch(() => null);
+
+  if (serverRes && !serverRes.ok) {
+    const payload = (await serverRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error || 'Permintaan ditolak oleh pelindung keamanan server.');
   }
 
   const id = `msg_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
@@ -525,8 +1002,17 @@ export async function submitContactMessageToCloud(input: {
       message,
       createdAt: serverTimestamp(),
     });
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CONTACT_COOLDOWN_KEY, String(Date.now()));
+    }
     return id;
   } catch (error) {
+    if (isQuotaExceededError(error) && serverRes?.ok) {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(CONTACT_COOLDOWN_KEY, String(Date.now()));
+      }
+      return id;
+    }
     handleFirestoreError(error, OperationType.CREATE, path);
   }
 }
@@ -556,6 +1042,9 @@ export async function listContactMessagesFromCloud(): Promise<ContactMessage[]> 
       };
     });
   } catch (error) {
+    if (isQuotaExceededError(error)) {
+      return [];
+    }
     handleFirestoreError(error, OperationType.LIST, path);
   }
 }

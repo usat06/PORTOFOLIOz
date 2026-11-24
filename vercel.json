@@ -1,8 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }
+      ]
+    },
+    {
+      "source": "/media/(.*)\\.svg",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "sandbox; default-src 'none'; style-src 'unsafe-inline'" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index?__path=/api/$1" },
     { "source": "/uploads/(.*)", "destination": "/api/index?__path=/uploads/$1" },
-    { "source": "/((?!api/|uploads/|assets/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|uploads/|assets/|media/).*)", "destination": "/index.html" }
   ]
 }

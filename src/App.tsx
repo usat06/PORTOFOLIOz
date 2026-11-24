@@ -15,9 +15,17 @@ import { Lightbox } from './components/Lightbox';
 import { ProjectsSection } from './components/ProjectsSection';
 import { SkillsSection } from './components/SkillsSection';
 import { WorkGallery } from './components/WorkGallery';
-import { DEFAULT_SITE_CONFIG } from './data/defaultSite';
-import { auth, isAuthorizedAdmin } from './lib/firebase';
-import { subscribeToSiteConfig } from './services/portfolioStore';
+import {
+  auth,
+  FIRESTORE_QUOTA_UPGRADE_URL,
+  isAuthorizedAdmin,
+  isQuotaExceededError,
+} from './lib/firebase';
+import {
+  getInitialSiteConfig,
+  subscribeToSiteConfig,
+  writeCachedSiteSnapshot,
+} from './services/portfolioStore';
 import type { PortfolioWork, SiteConfig } from './types/site';
 import { applySiteTheme } from './utils/theme';
 
@@ -49,16 +57,17 @@ function parseCurrentRoute(): RouteState {
 }
 
 export default function App() {
-  const [site, setSite] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
+  const [site, setSite] = useState<SiteConfig>(() => getInitialSiteConfig());
   const [route, setRoute] = useState<RouteState>(() => parseCurrentRoute());
 
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [cloudSyncWarning, setCloudSyncWarning] = useState<string | null>(null);
 
   const [selectedWork, setSelectedWork] = useState<PortfolioWork | null>(null);
-  const [lightboxList, setLightboxList] = useState<PortfolioWork[]>(DEFAULT_SITE_CONFIG.works);
+  const [lightboxList, setLightboxList] = useState<PortfolioWork[]>(() => site.works);
   const pendingScrollRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -85,10 +94,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = subscribeToSiteConfig((cloudSite) => {
-      setSite(cloudSite);
-      setLightboxList(cloudSite.works);
-    });
+    const unsubscribe = subscribeToSiteConfig(
+      (cloudSite) => {
+        setCloudSyncWarning(null);
+        setSite(cloudSite);
+        setLightboxList(cloudSite.works);
+      },
+      (error) => {
+        if (isQuotaExceededError(error)) {
+          setCloudSyncWarning(
+            `Kuota harian baca gratis Firestore sedang penuh, sehingga situs menggunakan data cadangan lokal & snapshot GitHub agar tampilan tidak teriset. Anda dapat memantau kuota di ${FIRESTORE_QUOTA_UPGRADE_URL}`,
+          );
+        }
+      },
+    );
 
     return () => unsubscribe();
   }, []);
@@ -214,7 +233,9 @@ export default function App() {
         <AdminWorkspace
           site={site}
           user={adminUser}
+          cloudSyncWarning={cloudSyncWarning}
           onSiteSaved={(updated) => {
+            writeCachedSiteSnapshot(updated);
             setSite(updated);
             setLightboxList(updated.works);
           }}

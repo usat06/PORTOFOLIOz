@@ -1,10 +1,17 @@
-import { useState, type FormEvent } from 'react';
-import { ArrowUpRight, Check, Copy, Send } from 'lucide-react';
+import { useRef, useState, type FormEvent } from 'react';
+import { ArrowUpRight, Check, Copy, Send, ShieldCheck } from 'lucide-react';
 import { submitContactMessageToCloud } from '../services/portfolioStore';
 import type { SiteConfig } from '../types/site';
 
 interface ContactSectionProps {
   site: SiteConfig;
+}
+
+function createMathChallenge(): { a: number; b: number } {
+  return {
+    a: Math.floor(Math.random() * 7) + 2,
+    b: Math.floor(Math.random() * 8) + 1,
+  };
 }
 
 export function ContactSection({ site }: ContactSectionProps) {
@@ -14,6 +21,10 @@ export function ContactSection({ site }: ContactSectionProps) {
   const [email, setEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [honeypot, setHoneypot] = useState('');
+  const [challenge, setChallenge] = useState(() => createMathChallenge());
+  const [challengeAnswer, setChallengeAnswer] = useState('');
+  const formOpenedAtRef = useRef<number>(Date.now());
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<'idle' | 'sent' | 'error'>('idle');
   const [sendError, setSendError] = useState<string | null>(null);
@@ -30,6 +41,20 @@ export function ContactSection({ site }: ContactSectionProps) {
     }
   };
 
+  const handleToggleForm = () => {
+    setShowForm((prev) => {
+      const next = !prev;
+      if (next) {
+        formOpenedAtRef.current = Date.now();
+        setChallenge(createMathChallenge());
+        setChallengeAnswer('');
+      }
+      return next;
+    });
+    setSendStatus('idle');
+    setSendError(null);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSending(true);
@@ -37,12 +62,25 @@ export function ContactSection({ site }: ContactSectionProps) {
     setSendError(null);
 
     try {
-      await submitContactMessageToCloud({ name, email, subject, message });
+      await submitContactMessageToCloud({
+        name,
+        email,
+        subject,
+        message,
+        honeypot,
+        dwellMs: Date.now() - formOpenedAtRef.current,
+        challengeA: challenge.a,
+        challengeB: challenge.b,
+        challengeAnswer,
+      });
       setSendStatus('sent');
       setName('');
       setEmail('');
       setSubject('');
       setMessage('');
+      setHoneypot('');
+      setChallenge(createMathChallenge());
+      setChallengeAnswer('');
     } catch (err) {
       setSendStatus('error');
       setSendError(err instanceof Error ? err.message : 'Gagal mengirim pesan.');
@@ -50,6 +88,8 @@ export function ContactSection({ site }: ContactSectionProps) {
       setSending(false);
     }
   };
+
+  const safeMailtoEmail = site.contact.email.replace(/[\r\n]/g, '').trim();
 
   return (
     <section
@@ -73,7 +113,7 @@ export function ContactSection({ site }: ContactSectionProps) {
 
         <div className="flex flex-wrap items-center justify-center gap-4">
           <a
-            href={`mailto:${site.contact.email}`}
+            href={`mailto:${safeMailtoEmail}`}
             className="inline-flex max-w-full items-center gap-3 break-all border-b-2 border-ink pb-[10px] font-serif text-[clamp(20px,2.8vw,38px)] tracking-[-0.015em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent sm:gap-[18px] sm:break-normal"
           >
             {site.contact.email}
@@ -94,10 +134,7 @@ export function ContactSection({ site }: ContactSectionProps) {
         <div className="mt-8">
           <button
             type="button"
-            onClick={() => {
-              setShowForm((prev) => !prev);
-              setSendStatus('idle');
-            }}
+            onClick={handleToggleForm}
             className="inline-flex items-center gap-2 border border-ink bg-ink px-6 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-paper transition-colors hover:border-accent hover:bg-accent"
           >
             <Send className="h-3.5 w-3.5" />
@@ -134,6 +171,19 @@ export function ContactSection({ site }: ContactSectionProps) {
               </div>
             )}
 
+            {/* Hidden honeypot field against automated spam bots */}
+            <div aria-hidden="true" className="absolute -left-[9999px] top-0 h-0 w-0 overflow-hidden opacity-0">
+              <label htmlFor="company-website-field">Website</label>
+              <input
+                id="company-website-field"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+              />
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
@@ -142,6 +192,7 @@ export function ContactSection({ site }: ContactSectionProps) {
                 <input
                   type="text"
                   required
+                  maxLength={80}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Nama lengkap"
@@ -155,6 +206,7 @@ export function ContactSection({ site }: ContactSectionProps) {
                 <input
                   type="email"
                   required
+                  maxLength={120}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="nama@email.com"
@@ -167,6 +219,7 @@ export function ContactSection({ site }: ContactSectionProps) {
                 </label>
                 <input
                   type="text"
+                  maxLength={120}
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Kolaborasi proyek, pemotretan, atau pertanyaan..."
@@ -180,10 +233,27 @@ export function ContactSection({ site }: ContactSectionProps) {
                 <textarea
                   rows={4}
                   required
+                  maxLength={2500}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Tuliskan pesan Anda di sini..."
                   className="w-full border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-ink"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                  <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+                  Verifikasi Anti-Bot: Berapa hasil {challenge.a} + {challenge.b}?
+                </label>
+                <input
+                  type="number"
+                  required
+                  inputMode="numeric"
+                  value={challengeAnswer}
+                  onChange={(e) => setChallengeAnswer(e.target.value)}
+                  placeholder="Ketik angka jawaban"
+                  className="w-full max-w-[220px] border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-ink"
                 />
               </div>
             </div>
