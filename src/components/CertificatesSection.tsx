@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Award, ExternalLink } from 'lucide-react';
 import type { CertificateItem, PortfolioWork, SiteConfig } from '../types/site';
+import { CloudImg } from './CloudMedia';
 
 interface CertificatesSectionProps {
   site: SiteConfig;
@@ -82,7 +83,7 @@ export function CertificatesSection({ site, onInspectCertificate }: Certificates
                       aria-label={`Perbesar sertifikat ${cert.title}`}
                       className="group block aspect-[4/3] w-full overflow-hidden border-0 border-b border-line bg-paper-alt p-0 text-left"
                     >
-                      <img
+                      <CloudImg
                         src={cert.imageUrl}
                         alt={cert.title}
                         loading="lazy"

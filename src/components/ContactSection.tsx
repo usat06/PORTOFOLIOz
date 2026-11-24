@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowUpRight, Check, Copy, Send } from 'lucide-react';
+import { submitContactMessageToCloud } from '../services/portfolioStore';
 import type { SiteConfig } from '../types/site';
 
 interface ContactSectionProps {
@@ -36,31 +37,15 @@ export function ContactSection({ site }: ContactSectionProps) {
     setSendError(null);
 
     try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, subject, message }),
-      });
-      let data: { ok?: boolean; error?: string } = {};
-      try {
-        data = (await response.json()) as { ok?: boolean; error?: string };
-      } catch {
-        // Non-JSON response
-      }
-      if (!response.ok) {
-        setSendStatus('error');
-        setSendError(data.error || 'Gagal mengirim pesan.');
-        return;
-      }
-
+      await submitContactMessageToCloud({ name, email, subject, message });
       setSendStatus('sent');
       setName('');
       setEmail('');
       setSubject('');
       setMessage('');
-    } catch {
+    } catch (err) {
       setSendStatus('error');
-      setSendError('Tidak dapat terhubung ke server.');
+      setSendError(err instanceof Error ? err.message : 'Gagal mengirim pesan.');
     } finally {
       setSending(false);
     }

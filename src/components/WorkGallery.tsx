@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Camera, Play } from 'lucide-react';
 import type { PortfolioWork, SiteConfig } from '../types/site';
+import { CloudImg, CloudVideo } from './CloudMedia';
 
 interface WorkGalleryProps {
   site: SiteConfig;
@@ -131,7 +132,7 @@ export function WorkGallery({ site, onSelectWork }: WorkGalleryProps) {
                     {!hasFailed ? (
                       work.mediaType === 'video' ? (
                         <>
-                          <video
+                          <CloudVideo
                             src={work.imageUrl}
                             muted
                             loop
@@ -148,7 +149,7 @@ export function WorkGallery({ site, onSelectWork }: WorkGalleryProps) {
                           </span>
                         </>
                       ) : (
-                        <img
+                        <CloudImg
                           src={work.imageUrl}
                           alt={work.alt}
                           loading="lazy"

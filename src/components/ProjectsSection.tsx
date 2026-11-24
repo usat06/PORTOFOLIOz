@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, FolderGit2, Play } from 'lucide-react';
 import type { PortfolioWork, ProjectItem, SiteConfig } from '../types/site';
+import { CloudImg, CloudVideo } from './CloudMedia';
 
 interface ProjectsSectionProps {
   site: SiteConfig;
@@ -95,7 +96,7 @@ export function ProjectsSection({ site, onInspectMedia }: ProjectsSectionProps) 
                       >
                         {project.mediaType === 'video' ? (
                           <>
-                            <video
+                            <CloudVideo
                               src={project.imageUrl}
                               muted
                               loop
@@ -109,7 +110,7 @@ export function ProjectsSection({ site, onInspectMedia }: ProjectsSectionProps) 
                             </span>
                           </>
                         ) : (
-                          <img
+                          <CloudImg
                             src={project.imageUrl}
                             alt={project.title}
                             loading="lazy"

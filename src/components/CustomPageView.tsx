@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Camera, Play } from 'lucide-react';
 import type { CustomPage, PortfolioWork, SiteConfig } from '../types/site';
+import { CloudImg, CloudVideo } from './CloudMedia';
 
 interface CustomPageViewProps {
   page: CustomPage;
@@ -55,7 +56,7 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
         {page.coverUrl && !coverFailed && (
           <div className="mb-10 overflow-hidden bg-paper-alt sm:mb-12">
             {page.coverMediaType === 'video' ? (
-              <video
+              <CloudVideo
                 src={page.coverUrl}
                 controls
                 playsInline
@@ -63,7 +64,7 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
                 className="max-h-[75svh] w-full object-cover"
               />
             ) : (
-              <img
+              <CloudImg
                 src={page.coverUrl}
                 alt={page.title}
                 referrerPolicy="no-referrer"
@@ -102,7 +103,7 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
                       {!isFailed ? (
                         work.mediaType === 'video' ? (
                           <>
-                            <video
+                            <CloudVideo
                               src={work.imageUrl}
                               muted
                               loop
@@ -116,7 +117,7 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
                             </span>
                           </>
                         ) : (
-                          <img
+                          <CloudImg
                             src={work.imageUrl}
                             alt={work.alt}
                             referrerPolicy="no-referrer"

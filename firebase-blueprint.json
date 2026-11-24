@@ -1,0 +1,191 @@
+{
+  "entities": {
+    "SiteConfigDocument": {
+      "title": "SiteConfigDocument",
+      "description": "Complete portfolio website configuration, copy, theme settings, projects, certificates, gallery works, extra blocks, and custom pages.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "integer", "description": "Schema version number (3)." },
+        "brandName": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "brandDot": { "type": "string", "maxLength": 4 },
+        "brandSuffix": { "type": "string", "maxLength": 40 },
+        "brandTagline": { "type": "string", "maxLength": 60 },
+        "logo": { "type": "object" },
+        "sections": { "type": "object" },
+        "navLabels": { "type": "object" },
+        "uiLabels": { "type": "object" },
+        "colors": { "type": "object" },
+        "typography": { "type": "object" },
+        "design": { "type": "object" },
+        "hero": { "type": "object" },
+        "about": { "type": "object" },
+        "skillsEyebrow": { "type": "string", "maxLength": 80 },
+        "skillsTitle": { "type": "string", "maxLength": 80 },
+        "skillsNote": { "type": "string", "maxLength": 240 },
+        "skills": { "type": "array" },
+        "programsTitle": { "type": "string", "maxLength": 100 },
+        "programs": { "type": "array" },
+        "projectsEyebrow": { "type": "string", "maxLength": 80 },
+        "projectsTitle": { "type": "string", "maxLength": 100 },
+        "projectsNote": { "type": "string", "maxLength": 240 },
+        "projects": { "type": "array" },
+        "certificatesEyebrow": { "type": "string", "maxLength": 80 },
+        "certificatesTitle": { "type": "string", "maxLength": 100 },
+        "certificatesNote": { "type": "string", "maxLength": 240 },
+        "certificates": { "type": "array" },
+        "workEyebrow": { "type": "string", "maxLength": 80 },
+        "workTitle": { "type": "string", "maxLength": 80 },
+        "workNote": { "type": "string", "maxLength": 240 },
+        "works": { "type": "array" },
+        "extraBlocks": { "type": "array" },
+        "contact": { "type": "object" },
+        "footerCopyright": { "type": "string", "maxLength": 160 },
+        "pages": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": [
+        "schemaVersion",
+        "brandName",
+        "brandDot",
+        "brandSuffix",
+        "brandTagline",
+        "logo",
+        "sections",
+        "navLabels",
+        "uiLabels",
+        "colors",
+        "typography",
+        "design",
+        "hero",
+        "about",
+        "skillsEyebrow",
+        "skillsTitle",
+        "skillsNote",
+        "skills",
+        "programsTitle",
+        "programs",
+        "projectsEyebrow",
+        "projectsTitle",
+        "projectsNote",
+        "projects",
+        "certificatesEyebrow",
+        "certificatesTitle",
+        "certificatesNote",
+        "certificates",
+        "workEyebrow",
+        "workTitle",
+        "workNote",
+        "works",
+        "extraBlocks",
+        "contact",
+        "footerCopyright",
+        "pages",
+        "updatedAt",
+        "updatedBy"
+      ]
+    },
+    "MediaAsset": {
+      "title": "MediaAsset",
+      "description": "Metadata for an uploaded photo or video stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "filename": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "mimeType": { "type": "string", "minLength": 3, "maxLength": 100 },
+        "mediaType": { "type": "string", "enum": ["image", "video"], "maxLength": 10 },
+        "size": { "type": "integer" },
+        "chunkCount": { "type": "integer" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "filename",
+        "mimeType",
+        "mediaType",
+        "size",
+        "chunkCount",
+        "ownerId",
+        "createdAt"
+      ]
+    },
+    "MediaChunk": {
+      "title": "MediaChunk",
+      "description": "Base64-encoded binary slice of an uploaded MediaAsset.",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "index": { "type": "integer" },
+        "data": { "type": "string", "minLength": 1, "maxLength": 750000 },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "assetId",
+        "index",
+        "data",
+        "ownerId",
+        "createdAt"
+      ]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Message submitted by a portfolio visitor through the contact form.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "email": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+        "subject",
+        "message",
+        "createdAt"
+      ]
+    },
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Trusted administrator account record keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "email",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/site/{siteId}": {
+      "schema": { "$ref": "#/entities/SiteConfigDocument" },
+      "description": "Active portfolio site configuration document (document ID 'main'). Publicly readable, admin-writable."
+    },
+    "/media_assets/{assetId}": {
+      "schema": { "$ref": "#/entities/MediaAsset" },
+      "description": "Uploaded image and video metadata records. Publicly readable by asset ID, listed and modified only by verified admin."
+    },
+    "/media_assets/{assetId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/MediaChunk" },
+      "description": "Base64 chunks belonging to a parent MediaAsset document, gated by parent asset ownership and admin status."
+    },
+    "/contact_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Visitor contact submissions. Validated creation allowed publicly; read and deletion restricted strictly to verified admin."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminAccount" },
+      "description": "Verified administrator allowlist keyed by Firebase Auth UID."
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Terminal } from 'lucide-react';
 import type { SiteConfig } from '../types/site';
+import { CloudImg } from './CloudMedia';
 
 interface AboutSectionProps {
   site: SiteConfig;
@@ -89,7 +90,7 @@ export function AboutSection({ site }: AboutSectionProps) {
           <div className="space-y-5 lg:col-span-6">
             {site.about.showcaseImageUrl && !showcaseFailed && (
               <div className={`overflow-hidden border border-line bg-paper ${radiusClass}`}>
-                <img
+                <CloudImg
                   src={site.about.showcaseImageUrl}
                   alt={site.about.title}
                   referrerPolicy="no-referrer"

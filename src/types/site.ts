@@ -275,6 +275,7 @@ export interface SiteConfig {
 }
 
 export interface UploadedAsset {
+  id?: string;
   filename: string;
   url: string;
   mediaType: MediaType;

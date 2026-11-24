@@ -1,3 +1,4 @@
+import type { User } from 'firebase/auth';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   ArrowDown,
@@ -28,9 +29,20 @@ import {
   ASPECT_RATIO_OPTIONS,
   BODY_FONT_OPTIONS,
   COLOR_PRESETS,
+  DEFAULT_SITE_CONFIG,
   DISPLAY_FONT_OPTIONS,
   PLACEMENT_OPTIONS,
 } from '../data/defaultSite';
+import { BOOTSTRAPPED_ADMIN_EMAIL } from '../lib/firebase';
+import {
+  deleteCloudMediaAsset,
+  deleteContactMessageFromCloud,
+  grantAdminAccess,
+  listCloudMediaAssets,
+  listContactMessagesFromCloud,
+  saveSiteConfigToCloud,
+  uploadMediaToCloud,
+} from '../services/portfolioStore';
 import type {
   CardRadius,
   CertificateItem,
@@ -57,6 +69,7 @@ import type {
 } from '../types/site';
 import { applySiteTheme } from '../utils/theme';
 import { BrandLogo } from './BrandLogo';
+import { CloudImg, CloudVideo } from './CloudMedia';
 
 type AdminTab =
   | 'home'
@@ -71,7 +84,7 @@ type AdminTab =
 
 interface AdminWorkspaceProps {
   site: SiteConfig;
-  token: string;
+  user: User;
   onSiteSaved: (updated: SiteConfig) => void;
   onLogout: (reason?: string) => void;
   onExit: () => void;
@@ -90,19 +103,9 @@ function looksLikeVideoUrl(url: string): boolean {
   return VIDEO_EXT_RE.test(trimmed) || trimmed.startsWith('data:video/');
 }
 
-async function parseJsonSafe<T>(response: Response): Promise<T | null> {
-  try {
-    const text = await response.text();
-    if (!text) return null;
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
-
 export function AdminWorkspace({
   site,
-  token,
+  user,
   onSiteSaved,
   onLogout,
   onExit,
@@ -133,8 +136,8 @@ export function AdminWorkspace({
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
 
   // Security & system tab state
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [extraAdminUid, setExtraAdminUid] = useState('');
+  const [extraAdminEmail, setExtraAdminEmail] = useState('');
   const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -165,89 +168,29 @@ export function AdminWorkspace({
   useEffect(() => {
     let active = true;
 
-    fetch('/api/uploads', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (res.status === 401) {
-          onLogout('Sesi admin sudah berakhir atau tidak valid. Silakan masuk kembali.');
-          return null;
-        }
-        if (!res.ok) return null;
-        return parseJsonSafe<UploadedAsset[]>(res);
-      })
+    listCloudMediaAssets(user)
       .then((list) => {
-        if (active && Array.isArray(list)) setUploads(list);
+        if (active) setUploads(list);
       })
       .catch(() => {});
 
-    fetch('/api/admin/messages', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (res.status === 401) {
-          onLogout('Sesi admin sudah berakhir atau tidak valid. Silakan masuk kembali.');
-          return null;
-        }
-        if (!res.ok) return null;
-        return parseJsonSafe<ContactMessage[]>(res);
-      })
+    listContactMessagesFromCloud()
       .then((list) => {
-        if (active && Array.isArray(list)) setMessages(list);
+        if (active) setMessages(list);
       })
       .catch(() => {});
 
     return () => {
       active = false;
     };
-  }, [token, onLogout]);
+  }, [user]);
 
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(site);
 
   const uploadMediaFile = async (file: File): Promise<{ url: string; mediaType: MediaType } | null> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-
-    const data = await parseJsonSafe<{
-      url?: string;
-      mediaType?: MediaType;
-      filename?: string;
-      size?: number;
-      error?: string;
-    }>(response);
-
-    if (response.status === 401) {
-      onLogout();
-      throw new Error(data?.error || 'Sesi admin berakhir. Silakan masuk ulang.');
-    }
-
-    if (response.status === 413) {
-      throw new Error('Ukuran file melebihi batas unggahan proxy server. Kompres file atau gunakan file di bawah 30 MB.');
-    }
-
-    if (!response.ok || !data?.url) {
-      throw new Error(data?.error || `Gagal mengunggah file (${response.status}).`);
-    }
-
-    const mediaType: MediaType = data.mediaType === 'video' ? 'video' : 'image';
-    setUploads((prev) => [
-      {
-        filename: data.filename || file.name,
-        url: data.url!,
-        mediaType,
-        size: data.size ?? file.size,
-        createdAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-
-    return { url: data.url, mediaType };
+    const uploaded = await uploadMediaToCloud(file, user);
+    setUploads((prev) => [uploaded.asset, ...prev]);
+    return { url: uploaded.url, mediaType: uploaded.mediaType };
   };
 
   const handleSave = async () => {
@@ -256,34 +199,16 @@ export function AdminWorkspace({
     setSaveMessage(null);
 
     try {
-      const response = await fetch('/api/site', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(draft),
-      });
-
-      const payload = await parseJsonSafe<SiteConfig & { error?: string }>(response);
-      if (response.status === 401) {
-        onLogout();
-        setErrorMessage(payload?.error || 'Sesi admin berakhir. Silakan masuk ulang.');
-        return;
-      }
-
-      if (!response.ok || !payload) {
-        setErrorMessage(payload?.error || `Gagal menyimpan perubahan (${response.status}).`);
-        return;
-      }
-
-      prevSiteJsonRef.current = JSON.stringify(payload);
-      setDraft(structuredClone(payload));
-      onSiteSaved(payload);
-      setSaveMessage('Semua perubahan tersimpan.');
-      window.setTimeout(() => setSaveMessage(null), 3500);
-    } catch {
-      setErrorMessage('Gagal menyimpan perubahan ke server.');
+      const saved = await saveSiteConfigToCloud(draft, user);
+      prevSiteJsonRef.current = JSON.stringify(saved);
+      setDraft(structuredClone(saved));
+      onSiteSaved(saved);
+      setSaveMessage('Semua perubahan tersimpan permanen di cloud database dan tampil di semua tautan.');
+      window.setTimeout(() => setSaveMessage(null), 4000);
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal menyimpan perubahan ke cloud database.',
+      );
     } finally {
       setSaving(false);
     }
@@ -326,37 +251,12 @@ export function AdminWorkspace({
     setUploadingTarget('batch-gallery');
     setErrorMessage(null);
     try {
-      const formData = new FormData();
-      Array.from(fileList)
-        .slice(0, 20)
-        .forEach((f) => formData.append('files', f));
+      const selectedFiles = Array.from(fileList).slice(0, 20);
+      const uploadedResults: { asset: UploadedAsset; url: string; mediaType: MediaType; originalName: string }[] = [];
 
-      const response = await fetch('/api/uploads/batch', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const data = await parseJsonSafe<
-        | { url: string; mediaType: MediaType; filename: string; size: number; originalName: string }[]
-        | { error?: string }
-      >(response);
-
-      if (response.status === 401) {
-        onLogout();
-        throw new Error(
-          data && !Array.isArray(data) && data.error
-            ? data.error
-            : 'Sesi admin berakhir. Silakan masuk ulang.',
-        );
-      }
-
-      if (!response.ok || !Array.isArray(data)) {
-        throw new Error(
-          data && !Array.isArray(data) && data.error
-            ? data.error
-            : 'Gagal mengunggah banyak file.',
-        );
+      for (const file of selectedFiles) {
+        const res = await uploadMediaToCloud(file, user);
+        uploadedResults.push({ ...res, originalName: file.name });
       }
 
       const categoryLabel = newWorkCategory.trim() || 'Galeri';
@@ -366,7 +266,7 @@ export function AdminWorkspace({
           .replace(/[^a-z0-9-]+/g, '-')
           .replace(/^-+|-+$/g, '') || 'galeri';
 
-      const createdWorks: PortfolioWork[] = data.map((item, idx) => {
+      const createdWorks: PortfolioWork[] = uploadedResults.map((item, idx) => {
         const cleanTitle =
           item.originalName.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ').trim() ||
           `Karya ${idx + 1}`;
@@ -382,22 +282,14 @@ export function AdminWorkspace({
         };
       });
 
-      setUploads((prev) => [
-        ...data.map((d) => ({
-          filename: d.filename,
-          url: d.url,
-          mediaType: d.mediaType,
-          size: d.size,
-          createdAt: new Date().toISOString(),
-        })),
-        ...prev,
-      ]);
-
+      setUploads((prev) => [...uploadedResults.map((r) => r.asset), ...prev]);
       setDraft((prev) => ({ ...prev, works: [...createdWorks, ...prev.works] }));
-      setSaveMessage(`${createdWorks.length} file ditambahkan ke draf galeri. Klik Simpan Perubahan untuk menerbitkan.`);
-      window.setTimeout(() => setSaveMessage(null), 4000);
+      setSaveMessage(
+        `${createdWorks.length} file terunggah ke cloud dan masuk ke draf galeri. Klik Simpan Perubahan untuk menerbitkan.`,
+      );
+      window.setTimeout(() => setSaveMessage(null), 4500);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Gagal mengunggah file.');
+      setErrorMessage(err instanceof Error ? err.message : 'Gagal mengunggah file ke cloud.');
     } finally {
       setUploadingTarget(null);
     }
@@ -415,21 +307,10 @@ export function AdminWorkspace({
 
   const handleDeleteMessage = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/messages/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 401) {
-        onLogout();
-        return;
-      }
-      if (res.ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== id));
-      } else {
-        setErrorMessage('Gagal menghapus pesan.');
-      }
+      await deleteContactMessageFromCloud(id);
+      setMessages((prev) => prev.filter((m) => m.id !== id));
     } catch {
-      setErrorMessage('Gagal menghapus pesan.');
+      setErrorMessage('Gagal menghapus pesan dari cloud database.');
     }
   };
 
@@ -480,28 +361,15 @@ export function AdminWorkspace({
     setSaving(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/admin/reset-site', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await parseJsonSafe<SiteConfig & { error?: string }>(res);
-      if (res.status === 401) {
-        onLogout();
-        setErrorMessage(data?.error || 'Sesi admin berakhir. Silakan masuk ulang.');
-        return;
-      }
-      if (!res.ok || !data) {
-        setErrorMessage(data?.error || 'Gagal mereset pengaturan.');
-        return;
-      }
-      prevSiteJsonRef.current = JSON.stringify(data);
-      setDraft(structuredClone(data));
-      onSiteSaved(data);
+      const saved = await saveSiteConfigToCloud(DEFAULT_SITE_CONFIG, user);
+      prevSiteJsonRef.current = JSON.stringify(saved);
+      setDraft(structuredClone(saved));
+      onSiteSaved(saved);
       setConfirmReset(false);
-      setSaveMessage('Situs berhasil dikembalikan ke pengaturan awal.');
+      setSaveMessage('Situs berhasil dikembalikan ke pengaturan awal di cloud.');
       window.setTimeout(() => setSaveMessage(null), 3500);
     } catch {
-      setErrorMessage('Gagal mereset situs.');
+      setErrorMessage('Gagal mereset situs ke pengaturan awal.');
     } finally {
       setSaving(false);
     }
@@ -634,62 +502,33 @@ export function AdminWorkspace({
     }));
   };
 
-  const handleDeleteUploadedAsset = async (filename: string) => {
+  const handleDeleteUploadedAsset = async (asset: UploadedAsset) => {
+    const assetId = asset.id || asset.url.split('/').pop()?.split('.')[0] || '';
+    if (!assetId) return;
     try {
-      const res = await fetch(`/api/uploads/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 401) {
-        onLogout();
-        return;
-      }
-      if (res.ok) {
-        setUploads((prev) => prev.filter((item) => item.filename !== filename));
-      } else {
-        setErrorMessage('Gagal menghapus file dari server.');
-      }
+      await deleteCloudMediaAsset(assetId);
+      setUploads((prev) =>
+        prev.filter((item) => (item.id ? item.id !== assetId : item.url !== asset.url)),
+      );
     } catch {
-      setErrorMessage('Gagal menghapus file dari server.');
+      setErrorMessage('Gagal menghapus file dari cloud database.');
     }
   };
 
-  const handlePasswordChange = async (event: FormEvent) => {
+  const handleGrantAdmin = async (event: FormEvent) => {
     event.preventDefault();
     setPasswordStatus(null);
     setErrorMessage(null);
 
-    if (newPassword.length < 6) {
-      setErrorMessage('Kata sandi baru minimal 6 karakter.');
-      return;
-    }
-
     try {
-      const response = await fetch('/api/admin/change-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-
-      const payload = await parseJsonSafe<{ ok?: boolean; error?: string }>(response);
-      if (response.status === 401) {
-        onLogout();
-        setErrorMessage(payload?.error || 'Sesi admin berakhir. Silakan masuk ulang.');
-        return;
-      }
-      if (!response.ok) {
-        setErrorMessage(payload?.error || 'Gagal mengganti kata sandi.');
-        return;
-      }
-
-      setCurrentPassword('');
-      setNewPassword('');
-      setPasswordStatus('Kata sandi admin berhasil diperbarui.');
-    } catch {
-      setErrorMessage('Gagal menghubungi server.');
+      await grantAdminAccess(extraAdminUid, extraAdminEmail);
+      setExtraAdminUid('');
+      setExtraAdminEmail('');
+      setPasswordStatus('Akses admin tambahan berhasil disimpan di Firestore.');
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal menambahkan akun admin tambahan.',
+      );
     }
   };
 
@@ -1451,7 +1290,7 @@ export function AdminWorkspace({
                           style={{ opacity: (draft.hero.backdropOpacity ?? 82) / 100 }}
                         >
                           {draft.hero.mediaType === 'video' ? (
-                            <video
+                            <CloudVideo
                               src={draft.hero.imageUrl}
                               muted
                               autoPlay
@@ -1460,7 +1299,7 @@ export function AdminWorkspace({
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <img
+                            <CloudImg
                               src={draft.hero.imageUrl}
                               alt="Pratinjau latar"
                               className="h-full w-full object-cover"
@@ -3564,14 +3403,14 @@ export function AdminWorkspace({
                     >
                       <div className="h-20 w-[88px] overflow-hidden bg-[#f4f4f5]">
                         {work.mediaType === 'video' ? (
-                          <video
+                          <CloudVideo
                             src={work.imageUrl}
                             muted
                             playsInline
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <img
+                          <CloudImg
                             src={work.imageUrl}
                             alt={work.alt}
                             referrerPolicy="no-referrer"
@@ -3758,17 +3597,17 @@ export function AdminWorkspace({
                   </h2>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-5">
                     {uploads.map((asset) => (
-                      <div key={asset.filename} className="border border-[#e4e4e7] bg-[#fafafa] p-2">
+                      <div key={asset.id || asset.url} className="border border-[#e4e4e7] bg-[#fafafa] p-2">
                         <div className="mb-2 aspect-square overflow-hidden bg-[#e4e4e7]">
                           {asset.mediaType === 'video' ? (
-                            <video
+                            <CloudVideo
                               src={asset.url}
                               muted
                               playsInline
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <img
+                            <CloudImg
                               src={asset.url}
                               alt={asset.filename}
                               className="h-full w-full object-cover"
@@ -3838,7 +3677,7 @@ export function AdminWorkspace({
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleDeleteUploadedAsset(asset.filename)}
+                            onClick={() => handleDeleteUploadedAsset(asset)}
                             className="border-0 bg-transparent p-1 text-red-600"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -4478,48 +4317,65 @@ export function AdminWorkspace({
             <div className="max-w-2xl space-y-6">
               <section className="border border-[#e4e4e7] bg-white p-6">
                 <h2 className="mb-2 mt-0 text-lg font-semibold text-[#18181b]">
-                  Ubah Kata Sandi Admin
+                  Status Penyimpanan Permanen & Akun Admin
                 </h2>
-                <p className="mb-5 mt-0 text-xs text-[#71717a]">
-                  Sesi login menggunakan token bertanda tangan di memori browser dan diverifikasi di server.
+                <p className="mb-4 mt-0 text-xs leading-relaxed text-[#71717a]">
+                  Semua perubahan konten, tema, halaman, foto, dan video disimpan langsung ke cloud database Firestore sehingga tampil seragam di semua tautan (AI Studio, Vercel, dan perangkat mana pun).
                 </p>
 
-                <form onSubmit={handlePasswordChange} className="space-y-4">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[#3f3f46]">
-                      Kata Sandi Saat Ini
-                    </label>
-                    <input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="w-full border border-[#d4d4d8] px-3 py-2.5 text-sm outline-none focus:border-[#18181b]"
-                    />
+                <div className="mb-5 border border-[#e4e4e7] bg-[#fafafa] p-4 text-xs">
+                  <div className="font-semibold text-[#18181b]">
+                    Akun Aktif: {user.email || 'Admin Google'}
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[#3f3f46]">
-                      Kata Sandi Baru
-                    </label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimal 6 karakter"
-                      className="w-full border border-[#d4d4d8] px-3 py-2.5 text-sm outline-none focus:border-[#18181b]"
-                    />
+                  <div className="mt-1 font-mono text-[11px] text-[#52525b]">
+                    UID: {user.uid}
                   </div>
-                  {passwordStatus && (
-                    <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                      {passwordStatus}
+                </div>
+
+                {user.email === BOOTSTRAPPED_ADMIN_EMAIL && (
+                  <form onSubmit={handleGrantAdmin} className="space-y-4 border-t border-[#f4f4f5] pt-4">
+                    <h3 className="m-0 text-sm font-semibold text-[#18181b]">
+                      Tambah Akun Google Admin Tambahan (Opsional)
+                    </h3>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-[#3f3f46]">
+                        UID Pengguna Firebase Auth
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={extraAdminUid}
+                        onChange={(e) => setExtraAdminUid(e.target.value)}
+                        placeholder="Tempel UID dari layar login admin"
+                        className="w-full border border-[#d4d4d8] px-3 py-2.5 font-mono text-sm outline-none focus:border-[#18181b]"
+                      />
                     </div>
-                  )}
-                  <button
-                    type="submit"
-                    className="border-0 bg-[#18181b] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-white hover:bg-[#27272a]"
-                  >
-                    Perbarui Kata Sandi
-                  </button>
-                </form>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-[#3f3f46]">
+                        Email Akun Google
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={extraAdminEmail}
+                        onChange={(e) => setExtraAdminEmail(e.target.value)}
+                        placeholder="email-admin@gmail.com"
+                        className="w-full border border-[#d4d4d8] px-3 py-2.5 text-sm outline-none focus:border-[#18181b]"
+                      />
+                    </div>
+                    {passwordStatus && (
+                      <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                        {passwordStatus}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      className="border-0 bg-[#18181b] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-white hover:bg-[#27272a]"
+                    >
+                      Beri Akses Admin
+                    </button>
+                  </form>
+                )}
               </section>
 
               <section className="border border-[#e4e4e7] bg-white p-6">

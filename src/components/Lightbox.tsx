@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { PortfolioWork } from '../types/site';
+import { CloudImg, CloudVideo } from './CloudMedia';
 
 interface LightboxProps {
   work: PortfolioWork | null;
@@ -110,7 +111,7 @@ export function Lightbox({ work, works, onClose, onNavigate }: LightboxProps) {
             <p className="m-0 text-sm">Media tidak dapat dimuat.</p>
           </div>
         ) : work.mediaType === 'video' ? (
-          <video
+          <CloudVideo
             key={work.imageUrl}
             src={work.imageUrl}
             controls
@@ -120,7 +121,7 @@ export function Lightbox({ work, works, onClose, onNavigate }: LightboxProps) {
             className="block max-h-[calc(100dvh-135px)] max-w-full bg-black object-contain"
           />
         ) : (
-          <img
+          <CloudImg
             src={work.imageUrl}
             alt={work.alt}
             referrerPolicy="no-referrer"

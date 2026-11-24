@@ -1,0 +1,355 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'usat.jalung25@students.utdi.ac.id';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+        (isEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidSiteConfig(data) {
+      let allowedKeys = [
+        'schemaVersion',
+        'brandName',
+        'brandDot',
+        'brandSuffix',
+        'brandTagline',
+        'logo',
+        'sections',
+        'navLabels',
+        'uiLabels',
+        'colors',
+        'typography',
+        'design',
+        'hero',
+        'about',
+        'skillsEyebrow',
+        'skillsTitle',
+        'skillsNote',
+        'skills',
+        'programsTitle',
+        'programs',
+        'projectsEyebrow',
+        'projectsTitle',
+        'projectsNote',
+        'projects',
+        'certificatesEyebrow',
+        'certificatesTitle',
+        'certificatesNote',
+        'certificates',
+        'workEyebrow',
+        'workTitle',
+        'workNote',
+        'works',
+        'extraBlocks',
+        'contact',
+        'footerCopyright',
+        'pages',
+        'updatedAt',
+        'updatedBy'
+      ];
+
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.schemaVersion is int &&
+        data.schemaVersion >= 1 &&
+        data.schemaVersion <= 10 &&
+        data.brandName is string &&
+        data.brandName.size() >= 1 &&
+        data.brandName.size() <= 40 &&
+        data.brandDot is string &&
+        data.brandDot.size() <= 4 &&
+        data.brandSuffix is string &&
+        data.brandSuffix.size() <= 40 &&
+        data.brandTagline is string &&
+        data.brandTagline.size() <= 60 &&
+        data.logo is map &&
+        data.sections is map &&
+        data.navLabels is map &&
+        data.uiLabels is map &&
+        data.colors is map &&
+        data.typography is map &&
+        data.design is map &&
+        data.hero is map &&
+        data.about is map &&
+        data.skillsEyebrow is string &&
+        data.skillsEyebrow.size() <= 80 &&
+        data.skillsTitle is string &&
+        data.skillsTitle.size() <= 80 &&
+        data.skillsNote is string &&
+        data.skillsNote.size() <= 240 &&
+        data.skills is list &&
+        data.skills.size() <= 12 &&
+        data.programsTitle is string &&
+        data.programsTitle.size() <= 100 &&
+        data.programs is list &&
+        data.programs.size() <= 40 &&
+        data.projectsEyebrow is string &&
+        data.projectsEyebrow.size() <= 80 &&
+        data.projectsTitle is string &&
+        data.projectsTitle.size() <= 100 &&
+        data.projectsNote is string &&
+        data.projectsNote.size() <= 240 &&
+        data.projects is list &&
+        data.projects.size() <= 30 &&
+        data.certificatesEyebrow is string &&
+        data.certificatesEyebrow.size() <= 80 &&
+        data.certificatesTitle is string &&
+        data.certificatesTitle.size() <= 100 &&
+        data.certificatesNote is string &&
+        data.certificatesNote.size() <= 240 &&
+        data.certificates is list &&
+        data.certificates.size() <= 40 &&
+        data.workEyebrow is string &&
+        data.workEyebrow.size() <= 80 &&
+        data.workTitle is string &&
+        data.workTitle.size() <= 80 &&
+        data.workNote is string &&
+        data.workNote.size() <= 240 &&
+        data.works is list &&
+        data.works.size() <= 60 &&
+        data.extraBlocks is list &&
+        data.extraBlocks.size() <= 15 &&
+        data.contact is map &&
+        data.footerCopyright is string &&
+        data.footerCopyright.size() <= 160 &&
+        data.pages is list &&
+        data.pages.size() <= 20 &&
+        data.updatedAt is timestamp &&
+        data.updatedAt == request.time &&
+        data.updatedBy is string &&
+        data.updatedBy.size() >= 1 &&
+        data.updatedBy.size() <= 128 &&
+        data.updatedBy == request.auth.uid;
+    }
+
+    function isValidMediaAsset(data, assetId) {
+      let allowedKeys = [
+        'id',
+        'filename',
+        'mimeType',
+        'mediaType',
+        'size',
+        'chunkCount',
+        'ownerId',
+        'createdAt'
+      ];
+
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.id is string &&
+        data.id == assetId &&
+        data.id.size() <= 128 &&
+        data.filename is string &&
+        data.filename.size() >= 1 &&
+        data.filename.size() <= 200 &&
+        data.mimeType is string &&
+        data.mimeType.size() >= 3 &&
+        data.mimeType.size() <= 100 &&
+        data.mediaType is string &&
+        (data.mediaType == 'image' || data.mediaType == 'video') &&
+        data.size is int &&
+        data.size >= 1 &&
+        data.size <= 20971520 &&
+        data.chunkCount is int &&
+        data.chunkCount >= 1 &&
+        data.chunkCount <= 40 &&
+        data.ownerId is string &&
+        data.ownerId.size() >= 1 &&
+        data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.createdAt == request.time;
+    }
+
+    function isValidMediaChunk(data, assetId) {
+      let allowedKeys = ['assetId', 'index', 'data', 'ownerId', 'createdAt'];
+
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.assetId is string &&
+        data.assetId == assetId &&
+        data.assetId.size() <= 128 &&
+        data.index is int &&
+        data.index >= 0 &&
+        data.index < 40 &&
+        data.data is string &&
+        data.data.size() >= 1 &&
+        data.data.size() <= 750000 &&
+        data.ownerId is string &&
+        data.ownerId.size() >= 1 &&
+        data.ownerId.size() <= 128 &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.createdAt == request.time;
+    }
+
+    function isValidContactMessage(data, messageId) {
+      let allowedKeys = ['id', 'name', 'email', 'subject', 'message', 'createdAt'];
+
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.id is string &&
+        data.id == messageId &&
+        data.id.size() <= 128 &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 80 &&
+        data.email is string &&
+        data.email.size() >= 3 &&
+        data.email.size() <= 120 &&
+        data.subject is string &&
+        data.subject.size() >= 1 &&
+        data.subject.size() <= 120 &&
+        data.message is string &&
+        data.message.size() >= 1 &&
+        data.message.size() <= 2500 &&
+        data.createdAt is timestamp &&
+        data.createdAt == request.time;
+    }
+
+    function isValidAdminAccount(data, uid) {
+      let allowedKeys = ['uid', 'email', 'createdAt'];
+
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.uid is string &&
+        data.uid == uid &&
+        data.uid.size() <= 128 &&
+        data.email is string &&
+        data.email.size() >= 3 &&
+        data.email.size() <= 160 &&
+        data.createdAt is timestamp &&
+        data.createdAt == request.time;
+    }
+
+    match /site/{siteId} {
+      allow get: if isValidId(siteId) && siteId == 'main';
+      allow list: if false;
+      allow create: if isValidId(siteId) &&
+        siteId == 'main' &&
+        isEmailVerified() &&
+        isValidSiteConfig(incoming()) &&
+        isAdmin();
+      allow update: if isValidId(siteId) &&
+        siteId == 'main' &&
+        isEmailVerified() &&
+        isValidSiteConfig(incoming()) &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'schemaVersion',
+          'brandName',
+          'brandDot',
+          'brandSuffix',
+          'brandTagline',
+          'logo',
+          'sections',
+          'navLabels',
+          'uiLabels',
+          'colors',
+          'typography',
+          'design',
+          'hero',
+          'about',
+          'skillsEyebrow',
+          'skillsTitle',
+          'skillsNote',
+          'skills',
+          'programsTitle',
+          'programs',
+          'projectsEyebrow',
+          'projectsTitle',
+          'projectsNote',
+          'projects',
+          'certificatesEyebrow',
+          'certificatesTitle',
+          'certificatesNote',
+          'certificates',
+          'workEyebrow',
+          'workTitle',
+          'workNote',
+          'works',
+          'extraBlocks',
+          'contact',
+          'footerCopyright',
+          'pages',
+          'updatedAt',
+          'updatedBy'
+        ]);
+      allow delete: if false;
+    }
+
+    match /media_assets/{assetId} {
+      allow get: if isValidId(assetId);
+      allow list: if isBootstrappedAdmin() || (isEmailVerified() && existing().ownerId == request.auth.uid);
+      allow create: if isValidId(assetId) &&
+        isEmailVerified() &&
+        isValidMediaAsset(incoming(), assetId) &&
+        isAdmin();
+      allow update: if false;
+      allow delete: if isValidId(assetId) && isAdmin();
+
+      match /chunks/{chunkId} {
+        allow get: if isValidId(assetId) && isValidId(chunkId);
+        allow list: if false;
+        allow create: if isValidId(assetId) &&
+          isValidId(chunkId) &&
+          isEmailVerified() &&
+          isValidMediaChunk(incoming(), assetId) &&
+          isAdmin() &&
+          get(/databases/$(database)/documents/media_assets/$(assetId)).data.ownerId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isValidId(assetId) && isValidId(chunkId) && isAdmin();
+      }
+    }
+
+    match /contact_messages/{messageId} {
+      allow get: if isValidId(messageId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(messageId) && isValidContactMessage(incoming(), messageId);
+      allow update: if false;
+      allow delete: if isValidId(messageId) && isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && isEmailVerified() && (request.auth.uid == uid || isBootstrappedAdmin());
+      allow list: if false;
+      allow create: if isValidId(uid) && isBootstrappedAdmin() && isValidAdminAccount(incoming(), uid);
+      allow update: if false;
+      allow delete: if isValidId(uid) && isBootstrappedAdmin();
+    }
+
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+  }
+}

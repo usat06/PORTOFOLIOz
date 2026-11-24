@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SiteConfig } from '../types/site';
+import { CloudImg } from './CloudMedia';
 
 interface BrandLogoProps {
   site: SiteConfig;
@@ -99,7 +100,7 @@ export function BrandLogo({ site, size = 'md' }: BrandLogoProps) {
     <span className="inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap">
       {logo.mode !== 'text-only' &&
         (showImage ? (
-          <img
+          <CloudImg
             src={logo.imageUrl}
             alt={site.brandName}
             referrerPolicy="no-referrer"

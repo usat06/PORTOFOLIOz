@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Terminal } from 'lucide-react';
 import type { HeroExtraText, SiteConfig } from '../types/site';
+import { CloudImg, CloudVideo } from './CloudMedia';
 
 interface HeroProps {
   site: SiteConfig;
@@ -128,7 +129,7 @@ export function Hero({ site }: HeroProps) {
             style={{ opacity: backdropOpacity }}
           >
             {hero.mediaType === 'video' ? (
-              <video
+              <CloudVideo
                 src={hero.imageUrl}
                 autoPlay
                 muted
@@ -138,7 +139,7 @@ export function Hero({ site }: HeroProps) {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <img
+              <CloudImg
                 src={hero.imageUrl}
                 alt={hero.alt}
                 referrerPolicy="no-referrer"
@@ -377,7 +378,7 @@ export function Hero({ site }: HeroProps) {
         {/* Centered Transparent Cutout Portrait Anchored Bottom Center */}
         {design.showPortrait && hero.portraitUrl && !portraitFailed && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex h-[48%] items-end justify-center sm:h-[64%] md:h-[78%] lg:h-[84%]">
-            <img
+            <CloudImg
               src={hero.portraitUrl}
               alt={hero.portraitAlt}
               referrerPolicy="no-referrer"
@@ -486,7 +487,7 @@ export function Hero({ site }: HeroProps) {
           <div className="relative min-h-[320px] overflow-hidden bg-[#323b39] sm:min-h-[420px] md:col-span-6 md:min-h-[calc(100svh-190px)] lg:col-span-5">
             {!imageFailed && hero.imageUrl ? (
               hero.mediaType === 'video' ? (
-                <video
+                <CloudVideo
                   src={hero.imageUrl}
                   autoPlay
                   muted
@@ -496,7 +497,7 @@ export function Hero({ site }: HeroProps) {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <img
+                <CloudImg
                   src={hero.imageUrl}
                   alt={hero.alt}
                   referrerPolicy="no-referrer"
@@ -510,7 +511,7 @@ export function Hero({ site }: HeroProps) {
 
             {design.showPortrait && hero.portraitUrl && !portraitFailed && (
               <div className="pointer-events-none absolute bottom-0 right-0 z-[2] flex h-[74%] w-full justify-end px-4">
-                <img
+                <CloudImg
                   src={hero.portraitUrl}
                   alt={hero.portraitAlt}
                   referrerPolicy="no-referrer"
@@ -601,7 +602,7 @@ export function Hero({ site }: HeroProps) {
 
             {design.showPortrait && hero.portraitUrl && !portraitFailed && (
               <div className="relative h-[260px] w-[220px] shrink-0 overflow-hidden bg-paper-alt md:h-[340px] md:w-[280px] lg:h-[400px] lg:w-[330px]">
-                <img
+                <CloudImg
                   src={hero.portraitUrl}
                   alt={hero.portraitAlt}
                   referrerPolicy="no-referrer"
@@ -627,7 +628,7 @@ export function Hero({ site }: HeroProps) {
     >
       {hero.backdropMode !== 'solid-gradient' && !imageFailed && hero.imageUrl ? (
         hero.mediaType === 'video' ? (
-          <video
+          <CloudVideo
             src={hero.imageUrl}
             autoPlay
             muted
@@ -638,7 +639,7 @@ export function Hero({ site }: HeroProps) {
             className="absolute inset-0 block h-full w-full object-cover object-[58%_center] md:object-center"
           />
         ) : (
-          <img
+          <CloudImg
             src={hero.imageUrl}
             alt={hero.alt}
             referrerPolicy="no-referrer"
@@ -685,7 +686,7 @@ export function Hero({ site }: HeroProps) {
 
       {design.showPortrait && hero.portraitUrl && !portraitFailed && (
         <div className="pointer-events-none absolute bottom-0 right-0 z-[2] flex h-[38%] w-full justify-end px-3 sm:h-[48%] md:right-[3%] md:h-[78%] md:w-auto md:px-0 lg:right-[5%] lg:h-[86%]">
-          <img
+          <CloudImg
             src={hero.portraitUrl}
             alt={hero.portraitAlt}
             referrerPolicy="no-referrer"

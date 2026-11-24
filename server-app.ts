@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
+import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
 import { DEFAULT_SITE_CONFIG } from './src/data/defaultSite.ts';
 import type {
   BrandLogoConfig,
@@ -984,6 +985,89 @@ export function createApiApp(): express.Express {
       res.status(404).json({ error: 'File tidak ditemukan.' });
     },
   );
+
+  app.get('/api/media/:file', async (req, res) => {
+    const rawFile = path.basename(req.params.file ?? '');
+    const assetId = rawFile.split('.')[0];
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(assetId)) {
+      res.status(400).json({ error: 'ID media tidak valid.' });
+      return;
+    }
+
+    const baseDocUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/media_assets/${assetId}`;
+    const apiKeyParam = `key=${encodeURIComponent(firebaseConfig.apiKey)}`;
+
+    try {
+      const metaRes = await fetch(`${baseDocUrl}?${apiKeyParam}`);
+      if (metaRes.status === 404) {
+        res.status(404).json({ error: 'Media tidak ditemukan.' });
+        return;
+      }
+      if (!metaRes.ok) {
+        res.status(502).json({ error: 'Gagal mengambil metadata media.' });
+        return;
+      }
+
+      const metaJson = (await metaRes.json()) as {
+        fields?: {
+          mimeType?: { stringValue?: string };
+          chunkCount?: { integerValue?: string };
+          size?: { integerValue?: string };
+        };
+      };
+
+      const mimeType = metaJson.fields?.mimeType?.stringValue || 'application/octet-stream';
+      const chunkCount = Number(metaJson.fields?.chunkCount?.integerValue ?? '0');
+      if (!Number.isInteger(chunkCount) || chunkCount < 1 || chunkCount > 40) {
+        res.status(404).json({ error: 'Data media tidak valid.' });
+        return;
+      }
+
+      const chunkResponses = await Promise.all(
+        Array.from({ length: chunkCount }, (_, i) =>
+          fetch(`${baseDocUrl}/chunks/${i}?${apiKeyParam}`).then(async (r) => {
+            if (!r.ok) return null;
+            const json = (await r.json()) as { fields?: { data?: { stringValue?: string } } };
+            return json.fields?.data?.stringValue ?? null;
+          }),
+        ),
+      );
+
+      if (chunkResponses.some((chunk) => !chunk)) {
+        res.status(404).json({ error: 'Potongan media tidak lengkap.' });
+        return;
+      }
+
+      const buffer = Buffer.concat(chunkResponses.map((b64) => Buffer.from(b64!, 'base64')));
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Accept-Ranges', 'bytes');
+      if (mimeType === 'image/svg+xml') {
+        res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; style-src 'unsafe-inline'");
+      }
+
+      const rangeHeader = req.headers.range;
+      if (rangeHeader && /^bytes=\d*-\d*$/.test(rangeHeader)) {
+        const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+        const start = startStr ? parseInt(startStr, 10) : 0;
+        const end = endStr ? Math.min(parseInt(endStr, 10), buffer.length - 1) : buffer.length - 1;
+        if (start <= end && start < buffer.length) {
+          const slice = buffer.subarray(start, end + 1);
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${buffer.length}`);
+          res.setHeader('Content-Length', String(slice.length));
+          res.send(slice);
+          return;
+        }
+      }
+
+      res.setHeader('Content-Length', String(buffer.length));
+      res.send(buffer);
+    } catch {
+      res.status(500).json({ error: 'Gagal memuat media dari cloud storage.' });
+    }
+  });
 
   app.get('/api/site', (_req, res) => {
     const store = readStore();

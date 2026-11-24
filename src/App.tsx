@@ -1,3 +1,4 @@
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AboutSection } from './components/AboutSection';
 import { AdminAuthScreen } from './components/AdminAuthScreen';
@@ -5,6 +6,7 @@ import { AdminWorkspace } from './components/AdminWorkspace';
 import { CertificatesSection } from './components/CertificatesSection';
 import { ContactSection } from './components/ContactSection';
 import { CustomPageView } from './components/CustomPageView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExtraBlocksSection } from './components/ExtraBlocksSection';
 import { Footer } from './components/Footer';
 import { Header } from './components/Header';
@@ -14,6 +16,8 @@ import { ProjectsSection } from './components/ProjectsSection';
 import { SkillsSection } from './components/SkillsSection';
 import { WorkGallery } from './components/WorkGallery';
 import { DEFAULT_SITE_CONFIG } from './data/defaultSite';
+import { auth, isAuthorizedAdmin } from './lib/firebase';
+import { subscribeToSiteConfig } from './services/portfolioStore';
 import type { PortfolioWork, SiteConfig } from './types/site';
 import { applySiteTheme } from './utils/theme';
 
@@ -21,8 +25,6 @@ type RouteState =
   | { view: 'home' }
   | { view: 'page'; slug: string }
   | { view: 'admin' };
-
-const ADMIN_TOKEN_STORAGE_KEY = 'uj_admin_session_token';
 
 function parseCurrentRoute(): RouteState {
   const hash = window.location.hash;
@@ -46,83 +48,49 @@ function parseCurrentRoute(): RouteState {
   return { view: 'home' };
 }
 
-function readStoredAdminToken(): string | null {
-  try {
-    return window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
 export default function App() {
   const [site, setSite] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [route, setRoute] = useState<RouteState>(() => parseCurrentRoute());
-  const [adminToken, setAdminToken] = useState<string | null>(() => readStoredAdminToken());
+
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [adminUser, setAdminUser] = useState<User | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const [selectedWork, setSelectedWork] = useState<PortfolioWork | null>(null);
   const [lightboxList, setLightboxList] = useState<PortfolioWork[]>(DEFAULT_SITE_CONFIG.works);
   const pendingScrollRef = useRef<string | null>(null);
-  const freshLoginTokenRef = useRef<string | null>(null);
-
-  const handleAuthenticated = useCallback((token: string) => {
-    freshLoginTokenRef.current = token;
-    setAuthNotice(null);
-    try {
-      window.sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
-    } catch {
-      // sessionStorage unavailable
-    }
-    setAdminToken(token);
-  }, []);
-
-  const handleLogout = useCallback((reason?: string) => {
-    freshLoginTokenRef.current = null;
-    setAuthNotice(typeof reason === 'string' && reason ? reason : null);
-    try {
-      window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-    } catch {
-      // sessionStorage unavailable
-    }
-    setAdminToken(null);
-  }, []);
-
-  useEffect(() => {
-    if (!adminToken) return;
-    if (freshLoginTokenRef.current === adminToken) {
-      freshLoginTokenRef.current = null;
-      return;
-    }
-    let active = true;
-    fetch('/api/admin/verify', {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    })
-      .then((res) => {
-        if (active && res.status === 401) {
-          handleLogout('Sesi admin sudah berakhir atau tidak valid. Silakan masuk kembali.');
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
-  }, [adminToken, handleLogout]);
 
   useEffect(() => {
     let active = true;
-    fetch('/api/site')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: SiteConfig | null) => {
-        if (!active || !data) return;
-        setSite(data);
-        setLightboxList(data.works);
-      })
-      .catch(() => {});
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!active) return;
+      setFirebaseUser(user);
+      if (!user) {
+        setAdminUser(null);
+        setCheckingAuth(false);
+        return;
+      }
+      setCheckingAuth(true);
+      const allowed = await isAuthorizedAdmin(user);
+      if (!active) return;
+      setAdminUser(allowed ? user : null);
+      setCheckingAuth(false);
+    });
 
     return () => {
       active = false;
+      unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToSiteConfig((cloudSite) => {
+      setSite(cloudSite);
+      setLightboxList(cloudSite.works);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -172,6 +140,19 @@ export default function App() {
     }
   }, [route]);
 
+  const handleAuthenticated = useCallback((user: User) => {
+    setAuthNotice(null);
+    setFirebaseUser(user);
+    setAdminUser(user);
+    setCheckingAuth(false);
+  }, []);
+
+  const handleLogout = useCallback(async (reason?: string) => {
+    setAuthNotice(typeof reason === 'string' && reason ? reason : null);
+    setAdminUser(null);
+    await signOut(auth).catch(() => {});
+  }, []);
+
   const navigateHome = useCallback((sectionId?: string) => {
     const targetHash = sectionId ? `#${sectionId}` : '#beranda';
     const cleanPath = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -215,93 +196,99 @@ export default function App() {
     setSelectedWork(null);
   }, []);
 
-  if (route.view === 'admin') {
-    if (!adminToken) {
+  const content = (() => {
+    if (route.view === 'admin') {
+      if (!adminUser) {
+        return (
+          <AdminAuthScreen
+            currentUser={firebaseUser}
+            checkingAuth={checkingAuth}
+            onAuthenticated={handleAuthenticated}
+            onExit={() => navigateHome('beranda')}
+            notice={authNotice}
+          />
+        );
+      }
+
       return (
-        <AdminAuthScreen
-          onAuthenticated={handleAuthenticated}
+        <AdminWorkspace
+          site={site}
+          user={adminUser}
+          onSiteSaved={(updated) => {
+            setSite(updated);
+            setLightboxList(updated.works);
+          }}
+          onLogout={handleLogout}
           onExit={() => navigateHome('beranda')}
-          notice={authNotice}
         />
       );
     }
 
+    const activeCustomPage =
+      route.view === 'page'
+        ? site.pages.find((p) => p.slug === route.slug && p.published) ?? null
+        : null;
+
     return (
-      <AdminWorkspace
-        site={site}
-        token={adminToken}
-        onSiteSaved={(updated) => {
-          setSite(updated);
-          setLightboxList(updated.works);
-        }}
-        onLogout={handleLogout}
-        onExit={() => navigateHome('beranda')}
-      />
+      <div className="min-h-screen bg-paper text-ink transition-colors duration-200">
+        <Header
+          site={site}
+          activePageSlug={activeCustomPage?.slug ?? null}
+          onNavigateHome={navigateHome}
+          onNavigatePage={navigateToPage}
+        />
+        <main>
+          {activeCustomPage ? (
+            <CustomPageView
+              page={activeCustomPage}
+              site={site}
+              onBackHome={() => navigateHome('beranda')}
+              onSelectWork={handleSelectWork}
+            />
+          ) : (
+            <>
+              <Hero site={site} />
+              <ExtraBlocksSection site={site} placement="after-hero" />
+
+              {(site.sections?.about ?? true) && <AboutSection site={site} />}
+              <ExtraBlocksSection site={site} placement="after-about" />
+
+              {(site.sections?.skills ?? true) && <SkillsSection site={site} />}
+              <ExtraBlocksSection site={site} placement="after-skills" />
+
+              {(site.sections?.projects ?? true) && (
+                <ProjectsSection site={site} onInspectMedia={handleInspectSingle} />
+              )}
+              <ExtraBlocksSection site={site} placement="after-projects" />
+
+              {(site.sections?.certificates ?? true) && (
+                <CertificatesSection site={site} onInspectCertificate={handleSelectWork} />
+              )}
+              <ExtraBlocksSection site={site} placement="after-certificates" />
+
+              {(site.sections?.gallery ?? true) && (
+                <WorkGallery site={site} onSelectWork={handleSelectWork} />
+              )}
+              <ExtraBlocksSection site={site} placement="after-gallery" />
+
+              {(site.sections?.contact ?? true) && <ContactSection site={site} />}
+            </>
+          )}
+        </main>
+        <Footer
+          site={site}
+          onNavigateHome={navigateHome}
+          onHiddenAdminTrigger={openHiddenAdmin}
+        />
+        <Lightbox
+          work={selectedWork}
+          works={lightboxList}
+          onClose={handleCloseLightbox}
+          onNavigate={setSelectedWork}
+        />
+      </div>
     );
-  }
+  })();
 
-  const activeCustomPage =
-    route.view === 'page'
-      ? site.pages.find((p) => p.slug === route.slug && p.published) ?? null
-      : null;
-
-  return (
-    <div className="min-h-screen bg-paper text-ink transition-colors duration-200">
-      <Header
-        site={site}
-        activePageSlug={activeCustomPage?.slug ?? null}
-        onNavigateHome={navigateHome}
-        onNavigatePage={navigateToPage}
-      />
-      <main>
-        {activeCustomPage ? (
-          <CustomPageView
-            page={activeCustomPage}
-            site={site}
-            onBackHome={() => navigateHome('beranda')}
-            onSelectWork={handleSelectWork}
-          />
-        ) : (
-          <>
-            <Hero site={site} />
-            <ExtraBlocksSection site={site} placement="after-hero" />
-
-            {(site.sections?.about ?? true) && <AboutSection site={site} />}
-            <ExtraBlocksSection site={site} placement="after-about" />
-
-            {(site.sections?.skills ?? true) && <SkillsSection site={site} />}
-            <ExtraBlocksSection site={site} placement="after-skills" />
-
-            {(site.sections?.projects ?? true) && (
-              <ProjectsSection site={site} onInspectMedia={handleInspectSingle} />
-            )}
-            <ExtraBlocksSection site={site} placement="after-projects" />
-
-            {(site.sections?.certificates ?? true) && (
-              <CertificatesSection site={site} onInspectCertificate={handleSelectWork} />
-            )}
-            <ExtraBlocksSection site={site} placement="after-certificates" />
-
-            {(site.sections?.gallery ?? true) && (
-              <WorkGallery site={site} onSelectWork={handleSelectWork} />
-            )}
-            <ExtraBlocksSection site={site} placement="after-gallery" />
-
-            {(site.sections?.contact ?? true) && <ContactSection site={site} />}
-          </>
-        )}
-      </main>
-      <Footer
-        site={site}
-        onNavigateHome={navigateHome}
-        onHiddenAdminTrigger={openHiddenAdmin}
-      />
-      <Lightbox
-        work={selectedWork}
-        works={lightboxList}
-        onClose={handleCloseLightbox}
-        onNavigate={setSelectedWork}
-      />
-    </div>
-  );
+  return <ErrorBoundary>{content}</ErrorBoundary>;
 }
