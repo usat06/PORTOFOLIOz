@@ -1,0 +1,8 @@
+{
+  "name": "Remix TaskFlow",
+  "description": "Simplify your daily workflow with an intuitive task management and organization tool designed for maximum productivity.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
