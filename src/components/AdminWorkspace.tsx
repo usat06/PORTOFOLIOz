@@ -73,7 +73,7 @@ interface AdminWorkspaceProps {
   site: SiteConfig;
   token: string;
   onSiteSaved: (updated: SiteConfig) => void;
-  onLogout: () => void;
+  onLogout: (reason?: string) => void;
   onExit: () => void;
 }
 
@@ -170,7 +170,7 @@ export function AdminWorkspace({
     })
       .then(async (res) => {
         if (res.status === 401) {
-          onLogout();
+          onLogout('Sesi admin sudah berakhir atau tidak valid. Silakan masuk kembali.');
           return null;
         }
         if (!res.ok) return null;
@@ -186,7 +186,7 @@ export function AdminWorkspace({
     })
       .then(async (res) => {
         if (res.status === 401) {
-          onLogout();
+          onLogout('Sesi admin sudah berakhir atau tidak valid. Silakan masuk kembali.');
           return null;
         }
         if (!res.ok) return null;
@@ -790,7 +790,7 @@ export function AdminWorkspace({
           <div className="hidden border-t border-[#e4e4e7] p-4 md:block">
             <button
               type="button"
-              onClick={onLogout}
+              onClick={() => onLogout()}
               className="flex w-full items-center gap-2.5 border border-[#e4e4e7] bg-white px-3.5 py-2 text-xs font-medium text-[#52525b] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
             >
               <LogOut className="h-3.5 w-3.5" />
@@ -4595,7 +4595,7 @@ export function AdminWorkspace({
                 <div className="mt-5 border-t border-[#f4f4f5] pt-4">
                   <button
                     type="button"
-                    onClick={onLogout}
+                    onClick={() => onLogout()}
                     className="inline-flex items-center gap-2 border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
                   >
                     <LogOut className="h-3.5 w-3.5" />

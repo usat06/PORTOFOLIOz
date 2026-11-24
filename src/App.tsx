@@ -58,12 +58,16 @@ export default function App() {
   const [site, setSite] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [route, setRoute] = useState<RouteState>(() => parseCurrentRoute());
   const [adminToken, setAdminToken] = useState<string | null>(() => readStoredAdminToken());
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const [selectedWork, setSelectedWork] = useState<PortfolioWork | null>(null);
   const [lightboxList, setLightboxList] = useState<PortfolioWork[]>(DEFAULT_SITE_CONFIG.works);
   const pendingScrollRef = useRef<string | null>(null);
+  const freshLoginTokenRef = useRef<string | null>(null);
 
   const handleAuthenticated = useCallback((token: string) => {
+    freshLoginTokenRef.current = token;
+    setAuthNotice(null);
     try {
       window.sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
     } catch {
@@ -72,7 +76,9 @@ export default function App() {
     setAdminToken(token);
   }, []);
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback((reason?: string) => {
+    freshLoginTokenRef.current = null;
+    setAuthNotice(typeof reason === 'string' && reason ? reason : null);
     try {
       window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
     } catch {
@@ -83,13 +89,17 @@ export default function App() {
 
   useEffect(() => {
     if (!adminToken) return;
+    if (freshLoginTokenRef.current === adminToken) {
+      freshLoginTokenRef.current = null;
+      return;
+    }
     let active = true;
     fetch('/api/admin/verify', {
       headers: { Authorization: `Bearer ${adminToken}` },
     })
       .then((res) => {
         if (active && res.status === 401) {
-          handleLogout();
+          handleLogout('Sesi admin sudah berakhir atau tidak valid. Silakan masuk kembali.');
         }
       })
       .catch(() => {});
@@ -211,6 +221,7 @@ export default function App() {
         <AdminAuthScreen
           onAuthenticated={handleAuthenticated}
           onExit={() => navigateHome('beranda')}
+          notice={authNotice}
         />
       );
     }

@@ -1,15 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { ArrowLeft, Eye, EyeOff, Lock, RotateCw, ShieldCheck } from 'lucide-react';
 
 interface AdminAuthScreenProps {
   onAuthenticated: (token: string) => void;
   onExit: () => void;
+  notice?: string | null;
 }
 
-export function AdminAuthScreen({ onAuthenticated, onExit }: AdminAuthScreenProps) {
+interface AuthStatusResponse {
+  needsSetup?: boolean;
+  hasEnvPasscode?: boolean;
+  isVercel?: boolean;
+  error?: string;
+}
+
+export function AdminAuthScreen({ onAuthenticated, onExit, notice }: AdminAuthScreenProps) {
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasEnvPasscode, setHasEnvPasscode] = useState(false);
+  const [isVercel, setIsVercel] = useState(false);
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,30 +27,39 @@ export function AdminAuthScreen({ onAuthenticated, onExit }: AdminAuthScreenProp
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    fetch('/api/admin/auth-status')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Server error');
-        return (await res.json()) as { needsSetup?: boolean; hasEnvPasscode?: boolean };
-      })
-      .then((data) => {
-        if (!active) return;
-        setNeedsSetup(Boolean(data.needsSetup));
-        setHasEnvPasscode(Boolean(data.hasEnvPasscode));
-      })
-      .catch(() => {
-        if (!active) return;
-        setError('Gagal terhubung ke server.');
-      })
-      .finally(() => {
-        if (active) setLoadingStatus(false);
-      });
+  const loadAuthStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    setStatusError(null);
+    try {
+      const res = await fetch('/api/admin/auth-status');
+      let data: AuthStatusResponse | null = null;
+      try {
+        data = (await res.json()) as AuthStatusResponse;
+      } catch {
+        data = null;
+      }
 
-    return () => {
-      active = false;
-    };
+      if (!res.ok || !data || typeof data.needsSetup !== 'boolean') {
+        throw new Error(data?.error || `Server mengembalikan status ${res.status}.`);
+      }
+
+      setNeedsSetup(Boolean(data.needsSetup));
+      setHasEnvPasscode(Boolean(data.hasEnvPasscode));
+      setIsVercel(Boolean(data.isVercel));
+    } catch (err) {
+      setStatusError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Gagal terhubung ke server admin.',
+      );
+    } finally {
+      setLoadingStatus(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadAuthStatus();
+  }, [loadAuthStatus]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -75,8 +94,9 @@ export function AdminAuthScreen({ onAuthenticated, onExit }: AdminAuthScreenProp
       } catch {
         // Non-JSON response
       }
+
       if (!response.ok || !payload.token) {
-        setError(payload.error || 'Autentikasi gagal.');
+        setError(payload.error || `Autentikasi gagal (${response.status}).`);
         return;
       }
 
@@ -113,17 +133,52 @@ export function AdminAuthScreen({ onAuthenticated, onExit }: AdminAuthScreenProp
             <h1 className="m-0 font-serif text-2xl font-normal tracking-tight">
               {loadingStatus
                 ? 'Memeriksa Akses...'
-                : needsSetup
-                  ? 'Buat Kata Sandi Admin'
-                  : 'Masuk Panel Admin'}
+                : statusError
+                  ? 'Koneksi Server Bermasalah'
+                  : needsSetup
+                    ? 'Buat Kata Sandi Admin'
+                    : 'Masuk Panel Admin'}
             </h1>
           </div>
         </div>
 
         {loadingStatus ? (
           <div className="py-8 text-sm text-[#71717a]">Memuat status keamanan server...</div>
+        ) : statusError ? (
+          <div className="space-y-4">
+            <div
+              role="alert"
+              className="border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-relaxed text-red-700"
+            >
+              {statusError}
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadAuthStatus()}
+              className="inline-flex w-full items-center justify-center gap-2 border-0 bg-[#18181b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#27272a]"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              Coba Lagi
+            </button>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
+            {notice && !error && (
+              <div
+                role="status"
+                className="border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-800"
+              >
+                {notice}
+              </div>
+            )}
+
+            {isVercel && !hasEnvPasscode && (
+              <div className="border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] leading-relaxed text-amber-900">
+                Server berjalan di mode serverless Vercel. Agar login admin stabil di semua permintaan, tambahkan variabel{' '}
+                <code>ADMIN_PASSCODE</code> dan <code>SESSION_SECRET</code> di Environment Variables Vercel.
+              </div>
+            )}
+
             <p className="m-0 text-sm leading-relaxed text-[#52525b]">
               {needsSetup
                 ? 'Atur kata sandi admin pertama kali untuk mengunci panel pengelolaan desain, media, dan halaman.'
@@ -200,6 +255,12 @@ export function AdminAuthScreen({ onAuthenticated, onExit }: AdminAuthScreenProp
                   ? 'Simpan & Masuk Admin'
                   : 'Masuk ke Panel Admin'}
             </button>
+
+            {!needsSetup && !hasEnvPasscode && (
+              <p className="m-0 text-center text-[11px] leading-relaxed text-[#71717a]">
+                Lupa kata sandi? Atur <code>ADMIN_PASSCODE</code> di environment server untuk menimpa akses admin.
+              </p>
+            )}
           </form>
         )}
       </div>
