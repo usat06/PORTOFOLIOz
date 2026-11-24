@@ -25,12 +25,12 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
     .filter(Boolean);
 
   return (
-    <article className="py-12 md:py-20">
-      <div className="mx-auto max-w-[1200px] px-[6%] md:px-[5.5%]">
+    <article className="min-h-[calc(100svh-64px)] py-10 sm:py-14 md:min-h-[calc(100svh-76px)] lg:py-20">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <button
           type="button"
           onClick={onBackHome}
-          className="mb-10 inline-flex items-center gap-3 border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-muted transition-colors hover:text-accent"
+          className="mb-8 inline-flex items-center gap-3 border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-muted transition-colors hover:text-accent sm:mb-10"
         >
           <ArrowLeft className="h-4 w-4" />
           {site.uiLabels?.pageBackLabel || 'Kembali ke Beranda'}
@@ -42,25 +42,25 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
           </div>
         )}
 
-        <h1 className="mb-6 mt-4 font-serif text-[clamp(42px,6vw,84px)] font-bold uppercase leading-[1.0] tracking-[-0.025em] text-ink">
+        <h1 className="mb-6 mt-4 font-serif text-[clamp(36px,6vw,84px)] font-bold uppercase leading-[1.0] tracking-[-0.025em] text-ink">
           {page.title}
         </h1>
 
         {page.lead && (
-          <p className="mb-10 max-w-[720px] font-accent text-[clamp(24px,2.8vw,36px)] italic leading-[1.35] text-ink/90">
+          <p className="mb-10 max-w-[820px] font-accent text-[clamp(22px,2.8vw,36px)] italic leading-[1.35] text-ink/90">
             {page.lead}
           </p>
         )}
 
         {page.coverUrl && !coverFailed && (
-          <div className="mb-12 overflow-hidden bg-paper-alt">
+          <div className="mb-10 overflow-hidden bg-paper-alt sm:mb-12">
             {page.coverMediaType === 'video' ? (
               <video
                 src={page.coverUrl}
                 controls
                 playsInline
                 onError={() => setCoverFailed(true)}
-                className="max-h-[620px] w-full object-cover"
+                className="max-h-[75svh] w-full object-cover"
               />
             ) : (
               <img
@@ -68,14 +68,14 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
                 alt={page.title}
                 referrerPolicy="no-referrer"
                 onError={() => setCoverFailed(true)}
-                className="max-h-[620px] w-full object-cover"
+                className="max-h-[75svh] w-full object-cover"
               />
             )}
           </div>
         )}
 
         {paragraphs.length > 0 && (
-          <div className="max-w-[740px] space-y-6 text-[16px] leading-[1.9] text-ink/85">
+          <div className="max-w-[820px] space-y-6 text-[16px] leading-[1.9] text-ink/85">
             {paragraphs.map((paragraph, index) => (
               <p key={index} className="m-0 whitespace-pre-line">
                 {paragraph}
@@ -85,11 +85,11 @@ export function CustomPageView({ page, site, onBackHome, onSelectWork }: CustomP
         )}
 
         {attachedWorks.length > 0 && (
-          <div className="mt-16 border-t border-line pt-12">
+          <div className="mt-14 border-t border-line pt-10 sm:mt-16 sm:pt-12">
             <h2 className="mb-8 font-serif text-3xl font-bold uppercase tracking-[-0.02em] text-ink">
               {site.uiLabels?.pageRelatedGalleryLabel || 'Galeri Terkait'}
             </h2>
-            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 xl:grid-cols-3">
               {attachedWorks.map((work) => {
                 const isFailed = Boolean(failedWorks[work.id]);
                 return (

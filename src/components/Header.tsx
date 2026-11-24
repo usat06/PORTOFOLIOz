@@ -62,7 +62,7 @@ export function Header({ site, activePageSlug, onNavigateHome, onNavigatePage }:
   return (
     <header
       id="beranda"
-      className="sticky top-0 z-20 flex h-[72px] items-center justify-between gap-6 border-b border-line/80 bg-paper/95 px-[5.5%] backdrop-blur-md transition-colors duration-200 md:h-[80px]"
+      className="sticky top-0 z-20 flex h-[64px] w-full items-center justify-between gap-4 border-b border-line/80 bg-paper/95 px-4 backdrop-blur-md transition-colors duration-200 sm:px-6 md:h-[76px] md:px-10 lg:gap-6 lg:px-12 xl:px-16"
     >
       <a
         href="#beranda"
@@ -82,7 +82,7 @@ export function Header({ site, activePageSlug, onNavigateHome, onNavigatePage }:
         aria-label={menuOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
         aria-expanded={menuOpen}
         aria-controls="main-nav"
-        className="flex h-11 w-11 items-center justify-center border-0 bg-transparent p-2 text-ink lg:hidden"
+        className="flex h-10 w-10 items-center justify-center border-0 bg-transparent p-2 text-ink lg:hidden"
       >
         {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </button>
@@ -92,7 +92,7 @@ export function Header({ site, activePageSlug, onNavigateHome, onNavigatePage }:
         aria-label="Navigasi utama"
         className={`${
           menuOpen ? 'flex' : 'hidden'
-        } absolute left-0 right-0 top-[72px] flex-col items-start gap-5 border-b border-line bg-paper px-[6%] pb-7 pt-5 shadow-[0_14px_20px_rgba(0,0,0,0.08)] lg:static lg:flex lg:flex-row lg:items-center lg:gap-7 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
+        } absolute left-0 right-0 top-[64px] max-h-[calc(100dvh-64px)] flex-col items-start gap-5 overflow-y-auto border-b border-line bg-paper px-4 pb-7 pt-5 shadow-[0_14px_20px_rgba(0,0,0,0.08)] sm:px-6 lg:static lg:flex lg:max-h-none lg:flex-row lg:items-center lg:gap-7 lg:overflow-visible lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
       >
         {visibleSectionLinks.map((link) => (
           <a

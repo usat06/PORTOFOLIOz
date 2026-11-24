@@ -80,14 +80,14 @@ export function Lightbox({ work, works, onClose, onNavigate }: LightboxProps) {
           onClose();
         }
       }}
-      className="fixed inset-0 z-30 flex items-center justify-center bg-[rgba(19,19,18,0.96)] px-[5%] pb-[50px] pt-[70px]"
+      className="fixed inset-0 z-30 flex items-center justify-center bg-[rgba(19,19,18,0.96)] px-4 pb-10 pt-16 sm:px-8"
     >
       <button
         ref={closeButtonRef}
         type="button"
         onClick={onClose}
         aria-label="Tutup tampilan"
-        className="absolute right-8 top-[27px] flex h-11 w-11 items-center justify-center border-0 bg-transparent p-2.5 text-white transition-opacity duration-150 hover:opacity-75"
+        className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center border-0 bg-transparent p-2.5 text-white transition-opacity duration-150 hover:opacity-75 sm:right-8 sm:top-6"
       >
         <X className="h-[27px] w-[27px]" />
       </button>
@@ -97,13 +97,13 @@ export function Lightbox({ work, works, onClose, onNavigate }: LightboxProps) {
           type="button"
           onClick={handlePrev}
           aria-label="Media sebelumnya"
-          className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center border-0 bg-transparent text-white/80 transition-colors duration-150 hover:text-white md:left-6"
+          className="absolute left-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center border-0 bg-transparent text-white/80 transition-colors duration-150 hover:text-white sm:left-5 md:left-8"
         >
           <ChevronLeft className="h-7 w-7" />
         </button>
       )}
 
-      <div className="flex max-h-full max-w-[min(1100px,100%)] flex-col items-center gap-[17px]">
+      <div className="flex max-h-full w-full max-w-[min(1440px,100%)] flex-col items-center gap-4">
         {mediaFailed ? (
           <div className="flex h-[320px] w-[min(540px,85vw)] flex-col items-center justify-center gap-3 border border-white/15 bg-white/5 px-6 text-center text-white/75">
             <Camera className="h-8 w-8 stroke-[1.5]" />
@@ -117,7 +117,7 @@ export function Lightbox({ work, works, onClose, onNavigate }: LightboxProps) {
             autoPlay
             playsInline
             onError={() => setMediaFailed(true)}
-            className="block max-h-[calc(100vh-145px)] max-w-full bg-black object-contain"
+            className="block max-h-[calc(100dvh-135px)] max-w-full bg-black object-contain"
           />
         ) : (
           <img
@@ -125,7 +125,7 @@ export function Lightbox({ work, works, onClose, onNavigate }: LightboxProps) {
             alt={work.alt}
             referrerPolicy="no-referrer"
             onError={() => setMediaFailed(true)}
-            className="block max-h-[calc(100vh-145px)] max-w-full object-contain"
+            className="block max-h-[calc(100dvh-135px)] max-w-full object-contain"
           />
         )}
         <div className="flex items-center gap-3 text-center text-[12px] uppercase tracking-[0.13em] text-[#eeeeee]">

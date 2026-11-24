@@ -51,16 +51,16 @@ export function WorkGallery({ site, onSelectWork }: WorkGalleryProps) {
 
   const gridClass =
     site.design.galleryLayout === 'uniform-3'
-      ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-      : 'grid-cols-1 sm:grid-cols-2';
+      ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+      : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3';
 
   return (
     <section
       id="karya"
       aria-labelledby="work-title"
-      className="scroll-mt-20 border-b border-line bg-paper-alt/40 py-[85px] pb-[95px] md:py-[120px] md:pb-[135px]"
+      className="scroll-mt-16 border-b border-line bg-paper-alt/40 py-14 pb-16 sm:py-20 sm:pb-24 md:scroll-mt-20 lg:py-24 lg:pb-28 2xl:py-28"
     >
-      <div className="mx-auto max-w-[1500px] px-[5.5%]">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <div className="mb-10 text-center md:mb-12">
           {site.workEyebrow && (
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-accent">

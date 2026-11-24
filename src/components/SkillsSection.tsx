@@ -11,9 +11,9 @@ export function SkillsSection({ site }: SkillsSectionProps) {
     <section
       id="keahlian"
       aria-labelledby="skills-title"
-      className="scroll-mt-20 border-b border-line bg-paper py-[85px] md:py-[120px]"
+      className="scroll-mt-16 border-b border-line bg-paper py-14 sm:py-20 md:scroll-mt-20 lg:py-24 2xl:py-28"
     >
-      <div className="mx-auto max-w-[1500px] px-[5.5%]">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <div className="mb-14 text-center md:mb-16">
           {site.skillsEyebrow && (
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-accent">

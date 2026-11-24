@@ -17,9 +17,9 @@ export function ExtraBlocksSection({ site, placement }: ExtraBlocksSectionProps)
       {blocks.map((block) => (
         <section
           key={block.id}
-          className="border-b border-line bg-paper py-16 md:py-24"
+          className="border-b border-line bg-paper py-14 sm:py-20 lg:py-24"
         >
-          <div className="mx-auto max-w-[1500px] px-[6%] md:px-[5.5%]">
+          <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_1.4fr] md:gap-[8%]">
               <div>
                 {block.eyebrow && (

@@ -41,9 +41,9 @@ export function CertificatesSection({ site, onInspectCertificate }: Certificates
     <section
       id="sertifikat"
       aria-labelledby="certificates-title"
-      className="scroll-mt-20 border-b border-line bg-paper py-[85px] md:py-[120px]"
+      className="scroll-mt-16 border-b border-line bg-paper py-14 sm:py-20 md:scroll-mt-20 lg:py-24 2xl:py-28"
     >
-      <div className="mx-auto max-w-[1500px] px-[5.5%]">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <div className="mb-12 text-center md:mb-16">
           {site.certificatesEyebrow && (
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-accent">
@@ -68,7 +68,7 @@ export function CertificatesSection({ site, onInspectCertificate }: Certificates
             {emptyText}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-7 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {site.certificates.map((cert) => (
               <article
                 key={cert.id}

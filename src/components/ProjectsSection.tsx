@@ -41,9 +41,9 @@ export function ProjectsSection({ site, onInspectMedia }: ProjectsSectionProps) 
     <section
       id="proyek"
       aria-labelledby="projects-title"
-      className="scroll-mt-20 border-b border-line bg-paper-alt/55 py-[85px] md:py-[120px]"
+      className="scroll-mt-16 border-b border-line bg-paper-alt/55 py-14 sm:py-20 md:scroll-mt-20 lg:py-24 2xl:py-28"
     >
-      <div className="mx-auto max-w-[1500px] px-[5.5%]">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <div className="mb-12 text-center md:mb-16">
           {site.projectsEyebrow && (
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-accent">
@@ -68,12 +68,16 @@ export function ProjectsSection({ site, onInspectMedia }: ProjectsSectionProps) 
             {emptyText}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-2 2xl:grid-cols-3">
             {site.projects.map((project, index) => (
               <article
                 key={project.id}
                 className={`flex flex-col justify-between overflow-hidden border border-line bg-paper transition-colors duration-200 hover:border-ink/40 ${radiusClass} ${
-                  index === 0 && site.projects.length % 2 === 1 ? 'md:col-span-2' : ''
+                  site.projects.length === 1
+                    ? 'md:col-span-2 2xl:col-span-3'
+                    : index === 0 && site.projects.length % 2 === 1
+                      ? 'md:col-span-2 2xl:col-span-1'
+                      : ''
                 }`}
               >
                 <div>

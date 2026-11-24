@@ -117,7 +117,7 @@ export function Hero({ site }: HeroProps) {
           background: sectionBackground,
           backgroundColor: customBg || undefined,
         }}
-        className={`relative min-h-[680px] overflow-hidden border-b border-line md:min-h-[760px] ${
+        className={`relative min-h-[calc(100svh-64px)] w-full overflow-hidden border-b border-line md:min-h-[calc(100svh-76px)] ${
           !customBg ? 'bg-paper' : ''
         } ${isDarkSurface ? 'text-white' : 'text-ink'}`}
       >
@@ -206,7 +206,7 @@ export function Hero({ site }: HeroProps) {
           />
         )}
 
-        <div className="relative z-[3] mx-auto flex min-h-[680px] max-w-[1500px] flex-col justify-between px-[5.5%] pb-8 pt-6 md:min-h-[760px] md:pb-12 md:pt-8">
+        <div className="relative z-[3] flex min-h-[calc(100svh-64px)] w-full flex-col justify-between px-4 pb-6 pt-5 sm:px-6 sm:pb-8 sm:pt-6 md:min-h-[calc(100svh-76px)] md:px-10 md:pb-12 md:pt-8 lg:px-12 xl:px-16">
           {/* Top Technical Telemetry Line */}
           {(hero.indexLabel || hero.sideLabel) && (
             <div
@@ -340,7 +340,7 @@ export function Hero({ site }: HeroProps) {
           </div>
 
           {/* Bottom Oversized Bold Display Titles Flanking the Foreground Portrait */}
-          <div className="relative z-[4] mt-auto grid grid-cols-1 items-end gap-4 pt-24 sm:pt-32 md:grid-cols-12 md:pt-10">
+          <div className="relative z-[4] mt-auto grid grid-cols-1 items-end gap-4 pt-14 sm:pt-24 md:grid-cols-12 md:pt-10">
             <div className="md:col-span-7">
               {(hero.headlineLine1 || hero.headlineLine2) && (
                 <h1
@@ -376,7 +376,7 @@ export function Hero({ site }: HeroProps) {
 
         {/* Centered Transparent Cutout Portrait Anchored Bottom Center */}
         {design.showPortrait && hero.portraitUrl && !portraitFailed && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex h-[64%] items-end justify-center sm:h-[74%] md:h-[82%]">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex h-[48%] items-end justify-center sm:h-[64%] md:h-[78%] lg:h-[84%]">
             <img
               src={hero.portraitUrl}
               alt={hero.portraitAlt}
@@ -410,11 +410,11 @@ export function Hero({ site }: HeroProps) {
       <section
         aria-labelledby="hero-title"
         style={{ background: splitSectionBg, backgroundColor: customBg || undefined }}
-        className={`relative border-b border-line py-12 md:py-20 ${!customBg ? 'bg-paper' : ''} ${
+        className={`relative flex min-h-[calc(100svh-64px)] w-full flex-col justify-center border-b border-line py-8 sm:py-12 md:min-h-[calc(100svh-76px)] md:py-14 ${!customBg ? 'bg-paper' : ''} ${
           isSplitDark ? 'text-white' : 'text-ink'
         }`}
       >
-        <div className="mx-auto grid max-w-[1500px] grid-cols-1 items-stretch gap-10 px-[6%] md:grid-cols-12 md:gap-12 md:px-[5.5%]">
+        <div className="grid w-full flex-1 grid-cols-1 items-stretch gap-8 px-4 sm:px-6 md:grid-cols-12 md:gap-10 md:px-10 lg:px-12 xl:px-16">
           <div className="flex flex-col justify-between md:col-span-6 lg:col-span-7">
             <div className="my-auto py-4">
               {renderExtraTexts(hero.extraTexts, isSplitDark)}
@@ -483,7 +483,7 @@ export function Hero({ site }: HeroProps) {
             </div>
           </div>
 
-          <div className="relative min-h-[400px] overflow-hidden bg-[#323b39] md:col-span-6 md:min-h-[540px] lg:col-span-5">
+          <div className="relative min-h-[320px] overflow-hidden bg-[#323b39] sm:min-h-[420px] md:col-span-6 md:min-h-[calc(100svh-190px)] lg:col-span-5">
             {!imageFailed && hero.imageUrl ? (
               hero.mediaType === 'video' ? (
                 <video
@@ -536,13 +536,13 @@ export function Hero({ site }: HeroProps) {
       <section
         aria-labelledby="hero-title"
         style={{ background: minimalBg, backgroundColor: customBg || undefined }}
-        className={`relative border-b border-line py-16 md:py-24 ${!customBg ? 'bg-paper' : ''} ${
+        className={`relative flex min-h-[calc(100svh-64px)] w-full items-center border-b border-line py-12 sm:py-16 md:min-h-[calc(100svh-76px)] md:py-20 ${!customBg ? 'bg-paper' : ''} ${
           isMinimalDark ? 'text-white' : 'text-ink'
         }`}
       >
-        <div className="mx-auto max-w-[1500px] px-[6%] md:px-[5.5%]">
+        <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
           <div className="flex flex-col justify-between gap-10 md:flex-row md:items-end">
-            <div className="max-w-[780px]">
+            <div className="max-w-[860px]">
               {renderExtraTexts(hero.extraTexts, isMinimalDark)}
 
               {hero.eyebrow && (
@@ -600,7 +600,7 @@ export function Hero({ site }: HeroProps) {
             </div>
 
             {design.showPortrait && hero.portraitUrl && !portraitFailed && (
-              <div className="relative h-[260px] w-[220px] shrink-0 overflow-hidden bg-paper-alt md:h-[320px] md:w-[270px]">
+              <div className="relative h-[260px] w-[220px] shrink-0 overflow-hidden bg-paper-alt md:h-[340px] md:w-[280px] lg:h-[400px] lg:w-[330px]">
                 <img
                   src={hero.portraitUrl}
                   alt={hero.portraitAlt}
@@ -623,7 +623,7 @@ export function Hero({ site }: HeroProps) {
     <section
       aria-labelledby="hero-title"
       style={{ backgroundColor: fullbleedBg }}
-      className="relative h-[740px] max-h-[calc(100svh-72px)] min-h-[600px] overflow-hidden text-white md:h-[calc(100vh-82px)] md:min-h-[660px] md:max-h-[900px]"
+      className="relative h-[calc(100svh-64px)] min-h-[520px] w-full overflow-hidden text-white md:h-[calc(100svh-76px)]"
     >
       {hero.backdropMode !== 'solid-gradient' && !imageFailed && hero.imageUrl ? (
         hero.mediaType === 'video' ? (
@@ -684,7 +684,7 @@ export function Hero({ site }: HeroProps) {
       )}
 
       {design.showPortrait && hero.portraitUrl && !portraitFailed && (
-        <div className="pointer-events-none absolute bottom-0 right-0 z-[2] flex h-[40%] w-full justify-end px-[2%] sm:h-[50%] md:right-[3%] md:h-[78%] md:w-auto md:px-0 lg:right-[5%] lg:h-[84%]">
+        <div className="pointer-events-none absolute bottom-0 right-0 z-[2] flex h-[38%] w-full justify-end px-3 sm:h-[48%] md:right-[3%] md:h-[78%] md:w-auto md:px-0 lg:right-[5%] lg:h-[86%]">
           <img
             src={hero.portraitUrl}
             alt={hero.portraitAlt}
@@ -695,12 +695,12 @@ export function Hero({ site }: HeroProps) {
         </div>
       )}
 
-      <div className="relative z-[3] mx-auto flex h-full max-w-[1500px] flex-col justify-between px-[7%] pb-6 pt-8 md:px-[5.5%] md:pb-[34px] md:pt-0">
+      <div className="relative z-[3] flex h-full w-full flex-col justify-between px-4 pb-6 pt-6 sm:px-6 md:px-10 md:pb-10 md:pt-8 lg:px-12 xl:px-16">
         <div
-          className={`max-w-[540px] md:my-auto md:max-w-[600px] lg:max-w-[650px] ${
+          className={`max-w-[540px] md:my-auto md:max-w-[640px] lg:max-w-[700px] ${
             contrastStyle === 'card'
-              ? 'bg-black/55 p-6 backdrop-blur-md md:ml-[2%] md:p-8'
-              : 'md:pl-[3.5%]'
+              ? 'bg-black/55 p-6 backdrop-blur-md md:p-8'
+              : ''
           }`}
         >
           {renderExtraTexts(hero.extraTexts, true)}

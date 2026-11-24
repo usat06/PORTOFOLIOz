@@ -27,9 +27,9 @@ export function AboutSection({ site }: AboutSectionProps) {
     <section
       id="tentang"
       aria-labelledby="about-title"
-      className="relative scroll-mt-20 overflow-hidden border-b border-line bg-paper-alt/60 py-[85px] transition-colors duration-200 md:py-[120px]"
+      className="relative scroll-mt-16 overflow-hidden border-b border-line bg-paper-alt/60 py-14 transition-colors duration-200 sm:py-20 md:scroll-mt-20 lg:py-24 2xl:py-28"
     >
-      <div className="mx-auto max-w-[1500px] px-[5.5%]">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <div className="mb-12 text-center md:mb-16">
           {site.about.eyebrow && (
             <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-accent">

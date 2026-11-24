@@ -28,7 +28,7 @@ export function Footer({ site, onNavigateHome, onHiddenAdminTrigger }: FooterPro
   };
 
   return (
-    <footer className="flex flex-wrap items-center justify-between gap-5 border-t border-line bg-paper px-[5.5%] py-[30px] font-mono text-[11px] tracking-[0.08em] text-muted sm:flex-nowrap">
+    <footer className="flex w-full flex-wrap items-center justify-between gap-4 border-t border-line bg-paper px-4 py-6 font-mono text-[11px] tracking-[0.08em] text-muted sm:flex-nowrap sm:px-6 sm:py-7 md:px-10 lg:px-12 xl:px-16">
       <a
         href="#beranda"
         onClick={(e) => {

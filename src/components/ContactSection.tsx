@@ -70,15 +70,15 @@ export function ContactSection({ site }: ContactSectionProps) {
     <section
       id="kontak"
       aria-labelledby="contact-title"
-      className="scroll-mt-20 bg-paper-alt py-[95px] pb-[105px] text-center md:py-[130px] md:pb-[140px]"
+      className="scroll-mt-16 bg-paper-alt py-16 pb-20 text-center sm:py-24 md:scroll-mt-20 lg:py-28 2xl:py-32"
     >
-      <div className="mx-auto max-w-[1500px] px-[5.5%]">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-16">
         <div className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-accent">
           {site.contact.eyebrow}
         </div>
         <h2
           id="contact-title"
-          className="mx-auto mb-[25px] mt-5 max-w-[840px] font-serif text-[clamp(38px,5.2vw,74px)] font-bold uppercase leading-[1.0] tracking-[-0.025em] text-ink"
+          className="mx-auto mb-[25px] mt-5 max-w-[840px] font-serif text-[clamp(36px,5.2vw,74px)] font-bold uppercase leading-[1.0] tracking-[-0.025em] text-ink"
         >
           {site.contact.title}
         </h2>
@@ -89,10 +89,10 @@ export function ContactSection({ site }: ContactSectionProps) {
         <div className="flex flex-wrap items-center justify-center gap-4">
           <a
             href={`mailto:${site.contact.email}`}
-            className="inline-flex items-center gap-[18px] border-b-2 border-ink pb-[10px] font-serif text-[clamp(22px,2.8vw,38px)] tracking-[-0.015em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent"
+            className="inline-flex max-w-full items-center gap-3 break-all border-b-2 border-ink pb-[10px] font-serif text-[clamp(20px,2.8vw,38px)] tracking-[-0.015em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent sm:gap-[18px] sm:break-normal"
           >
             {site.contact.email}
-            <ArrowUpRight className="h-[24px] w-[24px]" />
+            <ArrowUpRight className="h-5 w-5 shrink-0 sm:h-[24px] sm:w-[24px]" />
           </a>
 
           <button
